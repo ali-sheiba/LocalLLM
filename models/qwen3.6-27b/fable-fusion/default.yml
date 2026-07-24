@@ -1,0 +1,48 @@
+services:
+  llama-cpp-qwen36-27b-fable-fusion:
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    container_name: llama-cpp-qwen36-27b-fable-fusion
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - /models/DavidAU/Qwen3.6-27B-Fable-Fusion-711-Uncensored-Heretic-NM-DAU-NEO-MAX-MTP-GGUF:/models:ro
+    command: >-
+      --host 0.0.0.0
+      --port 8080
+      --metrics
+      -m /models/${MODEL:-Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-MTP-Q8_0.gguf}
+      --alias qwen3.6-27b-fable-fusion
+      -c ${CTX_SIZE:-262144}
+      -b ${BATCH_SIZE:-4096}
+      -ub ${UBATCH_SIZE:-512}
+      -ngl 99
+      -ts ${TENSOR_SPLIT:-1,1}
+      -fa on
+      --cache-type-k ${KV_TYPE:-q8_0}
+      --cache-type-v ${KV_TYPE:-q8_0}
+      -np ${NP:-2}
+      --jinja
+      --reasoning ${REASONING:-off}
+      --reasoning-format ${REASONING_FORMAT:-deepseek}
+      --temp ${TEMP:-${TEMPERATURE:-0.6}}
+      --top-p ${TOP_P:-0.95}
+      --top-k ${TOP_K:-20}
+      --min-p ${MIN_P:-0.0}
+      --repeat-penalty ${REPEAT_PENALTY:-1.0}
+      --spec-type draft-mtp
+      --spec-draft-n-max ${MTP_DRAFT_N_MAX:-2}
+      --repeat-penalty ${REPEAT_PENALTY:-1.1}
+      --repeat-last-n ${REPEAT_LAST_N:-256}
+      --dry-multiplier ${DRY_MULTIPLIER:-0.0}
+      --dry-base ${DRY_BASE:-1.75}
+      --dry-allowed-length ${DRY_ALLOWED_LENGTH:-2}
+
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
