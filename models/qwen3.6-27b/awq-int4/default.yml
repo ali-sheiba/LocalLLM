@@ -1,0 +1,84 @@
+# Qwen3.6-27B — dual 3090, PCIe (NO NVLink). Standalone port of club-3090
+# vllm/dual (cyankiwi/Qwen3.6-27B-AWQ-INT4).
+services:
+    vllm-qwen36-27b-dual:
+        # image: vllm/vllm-openai:v0.22.0
+        image: vllm/vllm-openai:v0.25.1
+        container_name: vllm-qwen36-27b-dual-balanced
+        restart: unless-stopped
+        ports:
+            - "8080:8000"
+        volumes:
+            - /models/cyankiwi/Qwen3.6-27B-AWQ-INT4:/models/Qwen3.6-27B-AWQ-INT4:ro
+            - /home/app/cache/vllm/torch_compile:/root/.cache/vllm/torch_compile_cache
+            - /home/app/cache/vllm/triton:/root/.triton/cache
+            - /models/froggeric/Qwen-Fixed-Chat-Templates/chat_template.jinja:/etc/qwen-froggeric-chat-template.jinja:ro
+        environment:
+            - NCCL_CUMEM_ENABLE=0
+            - NCCL_P2P_DISABLE=1
+            - NVIDIA_VISIBLE_DEVICES=all
+            - OMP_NUM_THREADS=1
+            - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True,max_split_size_mb:512
+            - VLLM_NO_USAGE_STATS=1
+            - VLLM_USE_FLASHINFER_SAMPLER=1
+            - VLLM_WORKER_MULTIPROC_METHOD=spawn
+            - CUDA_VISIBLE_DEVICES
+        shm_size: "16gb"
+        ipc: host
+        deploy:
+            resources:
+                reservations:
+                    devices:
+                        - driver: nvidia
+                          count: all
+                          capabilities: [gpu]
+
+        entrypoint: ["vllm", "serve"]
+        command:
+            - --model=/models/Qwen3.6-27B-AWQ-INT4
+            - --served-model-name
+            - qwen3.6-27b
+            - qwen3.6-27b-autoround
+            - --quantization
+            - compressed-tensors
+            - --dtype
+            - bfloat16
+            - --tensor-parallel-size
+            - "${TP:-2}"
+            - --pipeline-parallel-size
+            - "${PP:-1}"
+            - --max-model-len
+            - "${MAX_MODEL_LEN:-262144}"
+            - --gpu-memory-utilization
+            - "${GPU_MEMORY_UTILIZATION:-0.92}"
+            - --max-num-seqs
+            - "2"
+            - --max-num-batched-tokens
+            - "${MAX_NUM_BATCHED_TOKENS:-8192}"
+            - --kv-cache-dtype
+            - "${KV_CACHE_DTYPE:-int8_per_token_head}"
+            - --trust-remote-code
+            # froggeric chat-template override (see volumes block + docs/UPSTREAM.md)
+            - --chat-template
+            - /etc/qwen-froggeric-chat-template.jinja
+            - --reasoning-parser
+            - qwen3
+            - --default-chat-template-kwargs
+            - '{"enable_thinking": false}'
+            - --enable-auto-tool-choice
+            - --tool-call-parser
+            - qwen3_coder
+            # Prefix-caching OFF by default: MTP × prefix-cache poisons recurrent-state
+            # KV on this Qwen3-Next hybrid → corrupts tool calls on chained agents
+            # (#710, vllm#43559). Interim until the fix (vllm#48375) is in our pin;
+            # then restore. Re-enable now: PREFIX_CACHE_ARG=--enable-prefix-caching
+            - "${PREFIX_CACHE_ARG:---no-enable-prefix-caching}"
+            - --enable-chunked-prefill
+            - --speculative-config
+            - '{"method":"mtp","num_speculative_tokens":3}'
+            - --override-generation-config
+            - '{"temperature":${TEMP:-${TEMPERATURE:-0.6}},"top_p":${TOP_P:-0.95},"top_k":${TOP_K:-20},"min_p":${MIN_P:-0.0},"repetition_penalty":${REPEAT_PENALTY:-1.0}}'
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8000"

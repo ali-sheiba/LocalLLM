@@ -1,1 +1,7 @@
 .env
+.env.local
+models/**/.env
+models/**/.env.local
+experiments/**/.env
+experiments/**/.env.local
+benchmarks/results/

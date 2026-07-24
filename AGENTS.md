@@ -1,6 +1,8 @@
-# Docker — Local LLM Inference
+# Docker — Local LLM Inference for Agentic Coding
 
-This project manages Docker Compose stacks for running various LLMs locally on **dual RTX 3090 (24 GB each, PCIe, no NVLink)** using **vLLM** and **llama.cpp** backends.
+**Goal**: Find the best local LLM configuration for **agentic coding and workflows**. Each stack targets **2+ parallel sessions** with the **maximum context window** that fits on dual RTX 3090 (24 GB each, PCIe, no NVLink).
+
+This project stores and experiments with different model configurations across **vLLM** and **llama.cpp** backends. Every stack is a hypothesis — we tune, benchmark, and iterate.
 
 ## Hardware & Setup
 
@@ -18,80 +20,127 @@ This project manages Docker Compose stacks for running various LLMs locally on *
 
 ```
 docker/
-├── laguna-xs/
-│   └── docker-compose.yml              # llama.cpp — Laguna XS 2.1 (GGUF)
-├── llama-embed/
-│   └── docker-compose.yml              # llama.cpp CPU — Nomic embed (embedding service, 3 replicas)
-├── ornith-1.0-35b/
-│   └── docker-compose.yml              # ik-llama — Ornith 1.0 35B (GGUF, agentic-coding RL)
-├── qwen3.6-27b/
-│   ├── vllm/
-│   │   ├── fp8/docker-compose.yml       # vLLM — Qwen3.6-27B-FP8 (official Qwen quant)
-│   │   ├── awq-int4/docker-compose.yml  # vLLM — Qwen3.6-27B-AWQ-INT4 (cyankiwi)
-│   │   └── autoround-int4/
-│   │       ├── docker-compose.yml       # vLLM — Qwen3.6-27B-int4-AutoRound (Lorbus)
-│   │       └── update.yml               # Experimental update / A-B test variant
-│   └── llama.cpp/
-│       └── mtp/
-│           ├── .env                     # Private env vars
-│           └── docker-compose.yml       # llama.cpp — Qwen3.6-27B-MTP (speculative decoding)
-├── qwen3.6-35b/
-│   ├── fp8/docker-compose.yml           # vLLM — Qwen3.6-35B-A3B-FP8 (MoE + vision)
-│   └── a3b/uncensored.yml               # llama.cpp — Qwen3.6-35B-A3B-Uncensored (HauhauCS)
-├── qwopus3.6-27B/
-│   └── llama/
-│       ├── coder/docker-compose.yml     # llama.cpp — Qwopus3.6-27B-Coder (GGUF, Q8)
-│       └── coder-mtp/
-│           ├── .env                     # Private env vars
-│           └── docker-compose.yml       # llama.cpp — Qwopus3.6-27B-Coder-MTP (speculative)
-└── vllm-ornith/
-    └── docker-compose.yml               # vLLM — Ornith 1.0 35B (FP8)
+├── AGENTS.md
+├── .gitignore
+│
+├── models/                            # All runnable stacks, organized by model family
+│   │
+│   ├── laguna-xs/
+│   │   └── default.yml                # llama.cpp — Laguna XS 2.1 (GGUF)
+│   │
+│   ├── llama-embed/
+│   │   └── default.yml                # llama.cpp CPU — Nomic embed (3 replicas)
+│   │
+│   ├── ornith-1.0-35b/
+│   │   ├── llama.yml                  # ik-llama — Ornith 1.0 35B (Q8, agentic-coding RL)
+│   │   └── vllm.yml                   # vLLM — Ornith 1.0 35B (FP8)
+│   │
+│   ├── qwen3.6-27b/
+│   │   ├── fp8/default.yml            # vLLM — FP8 (official Qwen quant)
+│   │   ├── awq-int4/default.yml       # vLLM — AWQ-INT4 (cyankiwi)
+│   │   ├── autoround-int4/default.yml # vLLM — AutoRound-INT4 (Lorbus)
+│   │   └── mtp/default.yml            # llama.cpp — MTP speculative (Q4_K_M)
+│   │
+│   ├── qwen3.6-35b/
+│   │   ├── fp8/default.yml            # vLLM — MoE + vision (FP8)
+│   │   └── uncensored/default.yml     # llama.cpp — Uncensored (Q6_K_P)
+│   │
+│   └── qwopus3.6-27b/
+│       ├── coder/default.yml          # llama.cpp — Coder fine-tune (Q8)
+│       └── coder-mtp/default.yml      # llama.cpp — Coder + MTP speculative
+│
+├── experiments/                       # Experimental / A-B variants
+│   ├── README.md                      # Naming convention and how to run
+│   └── <model-name>/
+│       └── <description>.yml          # e.g. "v2-nccl-tuning.yml"
+│
+├── benchmarks/                        # Benchmark results & scoring
+│   ├── README.md                      # How we benchmark and scoring rubric
+│   ├── scoring.md                     # Current best scores per category
+│   └── results/                       # Per-stack benchmark logs
+│
+└── helpers/                           # Operational scripts
+    ├── switch-stack.sh                # Stop current, start new in one shot
+    └── check-gpu.sh                   # Quick nvidia-smi wrapper
+
+### Naming conventions
+
+| Pattern | Meaning |
+|---|---|
+| `models/<model>/<variant>/default.yml` | Canonical config for a stack |
+| `models/<model>/<model>.yml` | Single-variant stacks use the model name (e.g. `llama.yml`) |
+| `experiments/<model-name>/<name>.yml` | Experimental variant of an existing stack |
+| `.env` | Private env vars; placed alongside the compose file, never committed |
+| `.env.example` | Public template with no secrets |
 ```
+
+### Adding a new variant
+
+1. Create a sub-directory under `models/<model>/`
+2. Add a `default.yml` with the base configuration
+3. Add a `.env.example` with documented env vars
+4. If tuning, copy from `default.yml` to `experiments/<model-name>/` and iterate
+
+### Adding a new model
+
+1. Create a new top-level directory under `models/` using the model name
+2. Add variants as sub-directories, following the existing patterns
 
 ## Stack Quick Reference
 
-| Directory | Engine | Model | Quant | Context | Notes |
+| Stack | Engine | Model | Quant | Context | Notes |
 |---|---|---|---|---|---|
 | `laguna-xs/` | llama.cpp | Laguna XS 2.1 | Q4_K_M | 524K | GGUF, layer-split 2× 3090 |
-| `llama-embed/` | llama.cpp (CPU) | Nomic Embed Text v1.5 | Q8_0 | 8K | Embedding service, 3 replicas |
-| `ornith-1.0-35b/` | ik-llama | Ornith 1.0 35B | Q8_0 | 262K | Agentic-coding RL, MoE |
-| `qwen3.6-27b/vllm/fp8/` | vLLM | Qwen3.6-27B | FP8 | 262K | Official Qwen quant, MTP k=3 |
-| `qwen3.6-27b/vllm/awq-int4/` | vLLM | Qwen3.6-27B | AWQ-INT4 | 262K | cyankiwi quant |
-| `qwen3.6-27b/vllm/autoround-int4/` | vLLM | Qwen3.6-27B | AutoRound-INT4 | 262K | Lorbus quant |
-| `qwen3.6-27b/llama.cpp/mtp/` | llama.cpp | Qwen3.6-27B-MTP | Q4_K_M | 32K | Speculative MTP decoding |
+| `llama-embed/` | llama.cpp (CPU) | Nomic Embed v1.5 | Q8_0 | 8K | Embedding service, 3 replicas |
+| `ornith-1.0-35b/llama.yml` | ik-llama | Ornith 1.0 35B | Q8_0 | 262K | Agentic-coding RL, MoE |
+| `ornith-1.0-35b/vllm.yml` | vLLM | Ornith 1.0 35B | FP8 | 131K | vLLM variant of Ornith |
+| `qwen3.6-27b/fp8/` | vLLM | Qwen3.6-27B | FP8 | 262K | Official Qwen quant, MTP k=3 |
+| `qwen3.6-27b/awq-int4/` | vLLM | Qwen3.6-27B | AWQ-INT4 | 262K | cyankiwi quant |
+| `qwen3.6-27b/autoround-int4/` | vLLM | Qwen3.6-27B | AutoRound-INT4 | 262K | Lorbus quant |
+| `qwen3.6-27b/mtp/` | llama.cpp | Qwen3.6-27B-MTP | Q4_K_M | 32K | Speculative MTP decoding |
 | `qwen3.6-35b/fp8/` | vLLM | Qwen3.6-35B-A3B | FP8 | 131K | MoE hybrid (Mamba + full-attn), multimodal |
-| `qwen3.6-35b/a3b/` | llama.cpp | Qwen3.6-35B-A3B-Uncensored | Q6_K_P | 524K | HauhauCS aggressive |
-| `qwopus3.6-27B/llama/coder/` | llama.cpp | Qwopus3.6-27B-Coder | Q8_0 | 262K | Coder fine-tune |
-| `qwopus3.6-27B/llama/coder-mtp/` | llama.cpp | Qwopus3.6-27B-Coder-MTP | Q8_0 | 262K | Coder + speculative MTP |
-| `vllm-ornith/` | vLLM | Ornith 1.0 35B | FP8 | 131K | vLLM variant of Ornith |
+| `qwen3.6-35b/uncensored/` | llama.cpp | Qwen3.6-35B-A3B-Uncensored | Q6_K_P | 524K | HauhauCS aggressive |
+| `qwopus3.6-27b/coder/` | llama.cpp | Qwopus3.6-27B-Coder | Q8_0 | 262K | Coder fine-tune |
+| `qwopus3.6-27b/coder-mtp/` | llama.cpp | Qwopus3.6-27B-Coder-MTP | Q8_0 | 262K | Coder + speculative MTP |
 
 ## Common Patterns
 
 ### Starting a stack
 
 ```bash
-cd docker/<stack-dir>
+cd docker/models/<model>/<variant>
 docker compose up -d
 ```
 
-For stacks that use a non-default compose file:
+For stacks with a named compose file (not `default.yml`):
 
 ```bash
-# llama.cpp 35B uncensored
-cd docker/qwen3.6-35b/a3b
-docker compose -f uncensored.yml up -d
-
 # ik-llama Ornith
-cd docker/ornith-1.0-35b
+cd docker/models/ornith-1.0-35b
 MODEL_DIR=/models/deepreinforce-ai/Ornith-1.0-35B-GGUF PORT=8071 \
-  docker compose -f docker-compose.yml up -d
+  docker compose -f llama.yml up -d
 ```
 
 ### Stopping a stack
 
 ```bash
-cd docker/<stack-dir>
+cd docker/models/<model>/<variant>
 docker compose down
+```
+
+### Switching stacks
+
+```bash
+# Use the helper to stop current and start new in one shot
+./docker/helpers/switch-stack.sh <model>/<variant>
+```
+
+### Running an experiment
+
+```bash
+# Run an experimental variant (A-B test)
+cd docker/experiments/<model-name>
+docker compose -f <description>.yml up -d
 ```
 
 ### Common environment overrides
@@ -152,13 +201,16 @@ models/
 
 ```bash
 # Check running containers
-docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+docker ps --format "table {{.Names}}	{{.Status}}	{{.Ports}}"
 
 # View logs of a running stack
-docker compose -f docker/<stack>/docker-compose.yml logs -f
+docker compose -f docker/models/<model>/<variant>/default.yml logs -f
 
 # Check GPU memory
-nvidia-smi
+./docker/helpers/check-gpu.sh
+
+# Switch from current stack to another
+./docker/helpers/switch-stack.sh qwen3.6-27b/fp8
 
 # Clean up unused images
 docker image prune -a
