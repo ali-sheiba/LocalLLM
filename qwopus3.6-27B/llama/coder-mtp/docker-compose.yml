@@ -1,0 +1,40 @@
+services:
+    qwopus3.6-27b:
+        image: ghcr.io/ggml-org/llama.cpp:server-cuda-b9246
+        container_name: qwopus3.6-27b
+        restart: unless-stopped
+        ports:
+            - "8080:8080"
+        volumes:
+            - /models/Jackrong/Qwopus3.6-27B-Coder-MTP-GGUF:/models:ro
+        command: >-
+            --host 0.0.0.0
+            --port 8080
+            -m /models/Qwopus3.6-27B-Coder-MTP-Q8_0.gguf
+            --alias ${MODEL_ALIAS:-qwen3.6-27b}
+            -c ${CTX_SIZE:-262144}
+            -b ${BATCH_SIZE:-4096}
+            -ub ${UBATCH_SIZE:-512}
+            -ngl 99
+            -fa on
+            --cache-type-k ${KV_TYPE:-q8_0}
+            --cache-type-v ${KV_TYPE:-q8_0}
+            -np ${NP:-2}
+            --jinja
+            --reasoning ${REASONING:-off}
+            --reasoning-format ${REASONING_FORMAT:-deepseek}
+            --temp ${TEMP:-${TEMPERATURE:-0.6}}
+            --top-p ${TOP_P:-0.95}
+            --top-k ${TOP_K:-20}
+            --min-p ${MIN_P:-0.0}
+            --repeat-penalty ${REPEAT_PENALTY:-1.0}
+            --spec-type draft-mtp
+            --spec-draft-n-max ${MTP_DRAFT_N_MAX:-2}
+
+        deploy:
+            resources:
+                reservations:
+                    devices:
+                        - driver: nvidia
+                          count: all
+                          capabilities: [gpu]

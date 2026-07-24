@@ -1,0 +1,88 @@
+# vLLM — Qwen3.6-35B-A3B-FP8 (official Qwen block-FP8 quant) — Dual RTX 3090, TP=2, PCIe-only
+#
+# Architecture note: this is NOT the same family as the 27B. It is
+#   Qwen3_5MoeForConditionalGeneration (model_type: qwen3_5_moe) — a HYBRID
+#   linear-attention (Mamba-style SSM) + full-attention MoE, and MULTIMODAL (VL):
+#     - 40 layers: 30 linear_attention + 10 full_attention (full_attention_interval=4)
+#     - MoE: 256 experts, 8 active/token, ~3B active params ("A3B")
+#     - vision encoder (27 blocks) + MTP head (1 layer)
+#     - FP8 BLOCK quant (weight_block_size [128,128]), dynamic activations
+#
+# >>> REQUIRES a vLLM build that already supports `qwen3_5_moe` (very new arch,
+#     transformers 4.57.1). The pinned v0.22.0 you run for the 27B may NOT have it.
+#     If startup dies with "architecture ... not supported", bump the image to a
+#     newer tag / nightly that lists Qwen3_5MoeForConditionalGeneration.
+#
+# VRAM math (2x24GB): 35GB weights /2 (TP) ≈ 17.5GB + ~1.5GB replicated
+#   (embed/lm_head/vision) ≈ ~19GB/card. @ 0.92 util (~22GB) that leaves ~3GB/card
+#   for KV + activations. KV is CHEAP here: only 10 full-attn layers, 2 KV heads,
+#   and the 30 linear layers use a fixed-size recurrent state (does not grow with
+#   context) — so long context is affordable. FP8 runs via Marlin on Ampere
+#   (3090 has no native FP8), same path the 27B already uses.
+#
+# NOTE: port 8080 and both GPUs are shared with the running `vllm-qwen36-27b-dual`.
+#   Stop that stack first (`docker compose down`) or this one will conflict/OOM.
+services:
+    vllm-qwen36-35b-a3b:
+        image: vllm/vllm-openai:latest
+        container_name: vllm-qwen36-35b-a3b-fp8
+        restart: unless-stopped
+        ports:
+            - "8080:8000"
+        volumes:
+            - /models/Qwen/Qwen3.6-35B-A3B-FP8:/models/qwen36-35b-a3b-fp8:ro
+            - /home/app/cache/vllm/torch_compile_35b:/root/.cache/vllm/torch_compile_cache
+            - /home/app/cache/vllm/triton_35b:/root/.triton/cache
+            # No external chat template: the model ships its own chat_template.jinja
+            # (new tokenizer/special tokens; supports enable_thinking + <tool_call>).
+        environment:
+            - NCCL_CUMEM_ENABLE=0
+            - NCCL_P2P_DISABLE=1
+            - NVIDIA_VISIBLE_DEVICES=all
+            - OMP_NUM_THREADS=1
+            - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True,max_split_size_mb:512
+            - VLLM_NO_USAGE_STATS=1
+            - VLLM_USE_FLASHINFER_SAMPLER=1
+            - VLLM_WORKER_MULTIPROC_METHOD=spawn
+        shm_size: "16gb"
+        ipc: host
+        deploy:
+            resources:
+                reservations:
+                    devices:
+                        - driver: nvidia
+                          count: all
+                          capabilities: [gpu]
+
+        command:
+            - --model=/models/qwen36-35b-a3b-fp8
+            - --served-model-name=qwen3.6-35b-a3b
+            - --served-model-name=qwen3.6-35b
+            - --dtype=bfloat16
+            - --quantization=fp8 # block-FP8 auto-detected from quantization_config
+            - --trust-remote-code
+            - --tensor-parallel-size=2
+            - --disable-custom-all-reduce # PCIe-only, no NVLink between the 3090s
+            - --gpu-memory-utilization=0.92 # drop to 0.90 if it OOMs at load
+            - --max-model-len=131072 # cut to 131072 if KV can't cover full len at startup (max 192192)_
+            - --max-num-seqs=2
+            - --max-num-batched-tokens=8192
+            - --enable-prefix-caching
+            - --enable-chunked-prefill
+            # Multimodal: cap images and DISABLE video by default — video profiling
+            # reserves a lot of VRAM up front. Raise if you actually send video.
+            - '--limit-mm-per-prompt={"image":2,"video":0}'
+            # Reasoning / tools: this template uses <think> and Hermes-style <tool_call>.
+            - --reasoning-parser=qwen3
+            - --enable-auto-tool-choice
+            - --tool-call-parser=qwen3_coder # was qwen3_coder — wrong for this VL/general model
+            - '--default-chat-template-kwargs={"enable_thinking": false}'
+            # MTP speculative decoding — model has a single MTP layer, so k=1.
+            # If the image doesn't wire MTP for qwen3_5_moe, DELETE this one line.
+            - '--speculative-config={"method":"mtp","num_speculative_tokens":1}'
+            # Server-side sampling defaults (non-thinking); clients can override per request.
+            - '--override-generation-config={"temperature":0.7,"top_p":0.8,"top_k":20,"min_p":0.0,"repetition_penalty":1.0}'
+            # NOTE vs 27B: dropped --kv-cache-dtype=int8_per_token_head — int8 KV is
+            # unsafe/unsupported with the Mamba linear-attention state; KV stays bf16.
+            - --host=0.0.0.0
+            - --port=8000
