@@ -177,10 +177,12 @@ Most stacks support these overrides via `.env` or inline:
 
 ## Models Directory
 
-Models are stored under `/models/` on the host:
+Models are stored under `/models/` on the host, following **HuggingFace-style** `author/model-name` paths. This convention mirrors HF repository URLs (`huggingface.co/author/model-name`) for easy traceability.
+
+**Convention**: `<hf-username-or-org>/<model-name>`
 
 ```
-models/
+/models/
 ├── Qwen/Qwen3.6-27B-FP8
 ├── Qwen/Qwen3.6-35B-A3B-FP8
 ├── cyankiwi/Qwen3.6-27B-AWQ-INT4
@@ -193,9 +195,10 @@ models/
 ├── Jackrong/Qwopus3.6-27B-Coder-MTP-GGUF
 ├── poolside/Laguna-XS-2.1-GGUF
 ├── nomic-ai/nomic-embed-text-v1.5-GGUF
-├── froggeric/Qwen-Fixed-Chat-Templates/
-└── chat_template.jinja
+└── froggeric/Qwen-Fixed-Chat-Templates/
 ```
+
+**When adding a new model**: Create its directory as `/models/<hf-author>/<model-name>/` to maintain consistency with the source repository.
 
 ## Useful Commands
 
