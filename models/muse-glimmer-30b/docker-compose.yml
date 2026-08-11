@@ -1,0 +1,29 @@
+services:
+  llama-cpp-muse-glimmer-30b:
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    container_name: llama-cpp-muse-glimmer-30b
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - /home/app/models/unsloth/Muse-Glimmer-30B-GGUF:/models:ro
+    command: >-
+      --host 0.0.0.0
+      --port 8080
+      -m /models/Muse-Glimmer-30B-UD-Q8_K_XL.gguf
+      --alias muse-glimmer-30b
+      -c ${CTX_SIZE:-524288}
+      -ngl 99
+      -fa on
+      -np ${NP:-4}
+      --jinja
+      --reasoning ${REASONING:-off}
+      --reasoning-format ${REASONING_FORMAT:-deepseek}
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
