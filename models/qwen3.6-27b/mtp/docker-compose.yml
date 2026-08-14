@@ -1,18 +1,16 @@
 services:
   llama-cpp-qwen36-27b-mtp:
-    # image: ghcr.io/ggml-org/llama.cpp:server-cuda-b9246
     image: ghcr.io/ggml-org/llama.cpp:server-cuda
     container_name: llama-cpp-qwen36-27b
     restart: unless-stopped
     ports:
       - "8080:8080"
     volumes:
-      - /models/unsloth/Qwen3.6-27B-MTP-GGUF:/models:ro
-      # -m /models/Qwen3.6-27B-Q8_0.gguf
+      - /home/app/models/unsloth/Qwen3.6-27B-MTP-GGUF:/models:ro
     command: >-
       --host 0.0.0.0
       --port 8080
-      -m /models/${MODEL:-Qwen3.6-27B-Q4_K_M.gguf}
+      -m /models/${MODEL:-Qwen3.6-27B-Q8_0.gguf}
       --alias qwen3.6-27b
       -c ${CTX_SIZE:-32768}
       -b ${BATCH_SIZE:-2048}
