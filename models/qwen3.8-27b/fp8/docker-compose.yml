@@ -11,7 +11,7 @@ services:
             - /home/app/models/Qwen/Qwen3.8-27B-FP8:/models/Qwen3.8-27B-FP8:ro
             - /home/app/cache/vllm/torch_compile:/root/.cache/vllm/torch_compile_cache
             - /home/app/cache/vllm/triton:/root/.triton/cache
-            - /home/app/models/chat_template.jinja:/etc/qwen-froggeric-chat-template.jinja:ro
+            - /home/app/models/froggeric/Qwen-Fixed-Chat-Templates/chat_template.jinja:/etc/qwen-froggeric-chat-template.jinja:ro
         environment:
             - NCCL_CUMEM_ENABLE=0
             - NCCL_P2P_DISABLE=1
@@ -49,9 +49,9 @@ services:
             - --max-num-batched-tokens=8192
             - --tool-call-parser=qwen3_coder
             - --kv-cache-dtype=int8_per_token_head
-            - --chat-template=/etc/qwen-froggeric-chat-template.jinja
             - '--default-chat-template-kwargs={"enable_thinking": false}'
-            - '--speculative-config={"method":"mtp","num_speculative_tokens":3}'
+            - --chat-template=/etc/qwen-froggeric-chat-template.jinja
+            - '--speculative-config={"method":"mtp","num_speculative_tokens":2}'
             - '--override-generation-config={"temperature":0.6,"top_p":0.95,"top_k":20,"min_p":0.0,"repetition_penalty":1.0}'
             - --host=0.0.0.0
             - --port=8000
