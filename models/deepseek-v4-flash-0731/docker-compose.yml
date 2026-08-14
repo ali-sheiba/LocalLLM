@@ -1,0 +1,80 @@
+# DeepSeek-V4-Flash-0731 (UD-IQ1_S) on dual RTX 3090s.
+#
+# The 77 GiB target does not fit entirely in 48 GiB VRAM. Keep early MoE
+# layers on the CPU and offload the remaining layers evenly across both GPUs.
+# DSpark is opt-in: its 11 GiB sidecar can displace target layers and be slower
+# when the target must be CPU-offloaded.
+services:
+  llama-cpp-deepseek-v4-flash-0731:
+    # b10362: DSpark requires b10269+ and multi-GPU DSpark requires b10247+.
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda-b10236
+    container_name: llama-cpp-deepseek-v4-flash-0731
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:8080"
+    volumes:
+      - /home/app/models/unsloth/DeepSeek-V4-Flash-0731-GGUF:/models:ro
+    command:
+      - "-m"
+      - "/models/UD-IQ1_S/DeepSeek-V4-Flash-0731-UD-IQ1_S-00001-of-00003.gguf"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8080"
+      - "--alias"
+      - "deepseek-v4-flash"
+      - "-np"
+      - "1"
+      - "-c"
+      - "${CTX:-204800}"
+      - "-ngl"
+      - "99"
+      - "-sm"
+      - "layer"
+      - "-ts"
+      - "1,1"
+      - "-fa"
+      - "on"
+      - "-ot"
+      - '${OT_G0:-blk\.99999\.ffn_(gate|up|down)_exps\.weight=CUDA0},${OT_G1:-blk\.99999\.ffn_(gate|up|down)_exps\.weight=CUDA1},blk\.[0-9]+\.ffn_(gate|up|down)_exps\.weight=CPU'
+      - "-t"
+      - "${THREADS:-8}"
+      - "-ub"
+      - "4096"
+      - "-b"
+      - "4096"
+      - "--cache-prompt"
+      - "--no-mmap"
+      # q8_0 KV on the IQ2 tier ONLY: measured to free ~300 MiB/card, which clears
+      # this tier's 1840 MiB bundle. On Q8 (3264 MiB bundle) it buys nothing, so we
+      # do not take the quality reduction there. At our stated KV serving floor.
+      - "--cache-type-k"
+      - "q8_0"
+      - "--cache-type-v"
+      - "q8_0"
+      - "-md"
+      - "/models/dspark-DeepSeek-V4-Flash-0731-Q8_0.gguf"
+      - "--spec-type"
+      - "draft-dspark"
+      - "--spec-draft-n-max"
+      - "${SPEC_N:-5}"
+      - "--fit"
+      - "off"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -sf http://localhost:${PORT:-8031}/health || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 40
+      start_period: 900s
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
