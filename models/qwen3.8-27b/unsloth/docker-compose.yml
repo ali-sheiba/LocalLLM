@@ -1,0 +1,45 @@
+services:
+  llama-cpp-qwen38-27b-mtp:
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    container_name: llama-cpp-qwen38-27b
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - /home/app/models/unsloth/Qwen3.8-27B-GGUF:/models:ro
+    command: >-
+      --host 0.0.0.0
+      --port 8080
+      -m /models/${MODEL:-Qwen3.8-27B-Q8_0.gguf}
+      --alias qwen3.8-27b
+      -c ${CTX_SIZE:-262144}
+      -b ${BATCH_SIZE:-4096}
+      -ub ${UBATCH_SIZE:-512}
+      -ngl 99
+      --split-mode layer
+      --tensor-split 1,1
+      --main-gpu 0
+      -fa on
+      --cache-type-k ${KV_TYPE:-q4_0}
+      --cache-type-v ${KV_TYPE:-q4_0}
+      -np ${NP:-1}
+      --jinja
+      --reasoning ${REASONING:-off}
+      --reasoning-format ${REASONING_FORMAT:-deepseek}
+      --temp ${TEMP:-0.6}
+      --top-p ${TOP_P:-0.95}
+      --top-k ${TOP_K:-20}
+      --min-p ${MIN_P:-0.0}
+      --repeat-penalty ${REPEAT_PENALTY:-1.0}
+      --metrics
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
