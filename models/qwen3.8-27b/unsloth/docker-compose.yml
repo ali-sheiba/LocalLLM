@@ -7,6 +7,7 @@ services:
       - "8080:8080"
     volumes:
       - /home/app/models/unsloth/Qwen3.8-27B-GGUF:/models:ro
+      - /home/app/models/froggeric/Qwen-Fixed-Chat-Templates/chat_template.jinja:/etc/qwen-froggeric-chat-template.jinja:ro
     command: >-
       --host 0.0.0.0
       --port 8080
@@ -24,12 +25,16 @@ services:
       --cache-type-v ${KV_TYPE:-q4_0}
       -np ${NP:-1}
       --jinja
-      --reasoning ${REASONING:-off}
+      --chat-template-file /etc/qwen-froggeric-chat-template.jinja
       --reasoning-format ${REASONING_FORMAT:-deepseek}
-      --temp ${TEMP:-0.6}
+      --reasoning-preserve
+      --spec-type draft-mtp
+      --spec-draft-n-max ${MTP_DRAFT_N_MAX:-3}
+      --temp ${TEMP:-1.0}
       --top-p ${TOP_P:-0.95}
       --top-k ${TOP_K:-20}
       --min-p ${MIN_P:-0.0}
+      --presence-penalty 0.0
       --repeat-penalty ${REPEAT_PENALTY:-1.0}
       --metrics
     environment:

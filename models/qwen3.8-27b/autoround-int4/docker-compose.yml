@@ -1,14 +1,13 @@
-# vLLM — Qwen3.8-27B FP8 (official Qwen quant) — Dual RTX 3090, TP=2, PCIe-only
-# VRAM: ~14.5GB weights/card + ~9GB KV/card @ 0.92 util = fits 24GB cleanly
 services:
-  vllm-qwen38-27b:
-    image: vllm/vllm-openai:latest
-    container_name: vllm-qwen38-27b-fp8
+  vllm-qwen38-27b-autoround-int8:
+    # image: vllm/vllm-openai:v0.22.0
+    image: vllm/vllm-openai:v0.27.1
+    container_name: vllm-qwen38-27b-autoround-int8
     restart: unless-stopped
     ports:
       - "8080:8000"
     volumes:
-      - /home/app/models/Qwen/Qwen3.8-27B-FP8:/models/Qwen3.8-27B-FP8:ro
+      - /home/app/models/Minachist/Qwen3.8-27B-INT8-AutoRound:/models/Qwen3.8-27B-INT8-AutoRound:ro
       - /home/app/cache/vllm/torch_compile:/root/.cache/vllm/torch_compile_cache
       - /home/app/cache/vllm/triton:/root/.triton/cache
       - /home/app/models/froggeric/Qwen-Fixed-Chat-Templates/chat_template.jinja:/etc/qwen-froggeric-chat-template.jinja:ro
@@ -21,6 +20,7 @@ services:
       - VLLM_NO_USAGE_STATS=1
       - VLLM_USE_FLASHINFER_SAMPLER=1
       - VLLM_WORKER_MULTIPROC_METHOD=spawn
+      - CUDA_VISIBLE_DEVICES
     shm_size: "16gb"
     ipc: host
     deploy:
@@ -31,24 +31,26 @@ services:
               count: all
               capabilities: [gpu]
 
+    entrypoint: ["vllm", "serve"]
     command:
-      - --model=/models/Qwen3.8-27B-FP8
+      - --model=/models/Qwen3.8-27B-INT8-AutoRound
       - --served-model-name=qwen3.8-27b
-      - --dtype=bfloat16
+      - --dtype=float16
       - --max-num-seqs=2
-      - --quantization=fp8
       - --trust-remote-code
       - --max-model-len=262144
       - --enable-prefix-caching
       - --enable-chunked-prefill
       - --reasoning-parser=qwen3
       - --tensor-parallel-size=2
+      - --quantization=auto_round
+      - --kv-cache-dtype=fp8_e5m2
       - --enable-auto-tool-choice
+      - --pipeline-parallel-size=1
       - --disable-custom-all-reduce
       - --gpu-memory-utilization=0.92
       - --max-num-batched-tokens=8192
       - --tool-call-parser=qwen3_coder
-      - --kv-cache-dtype=int8_per_token_head
       - --chat-template=/etc/qwen-froggeric-chat-template.jinja
       - '--default-chat-template-kwargs={"enable_thinking": false}'
       - '--speculative-config={"method":"mtp","num_speculative_tokens":3}'
