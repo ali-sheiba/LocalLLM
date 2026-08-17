@@ -42,7 +42,12 @@ services:
       - --quantization=fp8
       - --trust-remote-code
       - --max-model-len=262144
-      - --enable-prefix-caching
+      # Prefix-caching OFF by default: MTP x prefix-cache poisons recurrent-state KV on
+      # this Qwen3.5 hybrid (48 GDN/linear-attn layers) -> garbled output, runaway loops,
+      # corrupted tool calls under 2+ parallel sessions (vllm#43559, vllm#47194, vllm#45477).
+      # vLLM marks the Mamba 'align' prefix-cache mode experimental (see startup warning).
+      # Re-enable for TTFT once the MTP x prefix-cache interaction is fixed: PREFIX_CACHE_ARG=--enable-prefix-caching
+      - "${PREFIX_CACHE_ARG:---no-enable-prefix-caching}"
       - --enable-chunked-prefill
       - --reasoning-parser=qwen3
       - --tensor-parallel-size=2
@@ -52,10 +57,22 @@ services:
       - --gpu-memory-utilization=0.92
       - --max-num-batched-tokens=8192
       - --tool-call-parser=qwen3_coder
-      - --kv-cache-dtype=fp8
+      # fp8 KV is uncalibrated on sm86 (checkpoint ships no q/k/v scales -> vLLM falls
+      # back to 1.0, "may cause accuracy issues") and Ampere has no native FP8 compute.
+      # int8_per_token_head is what the working qwen3.6-27b/fp8 stack uses. Override:
+      # KV_CACHE_DTYPE=fp8 (or bf16) if you want to A/B test.
+      - --kv-cache-dtype
+      - "${KV_CACHE_DTYPE:-int8_per_token_head}"
       # - --chat-template=/etc/qwen-froggeric-chat-template.jinja
       - '--default-chat-template-kwargs={"enable_thinking": ${ENABLE_THINKING:-false}}'
-      - '--speculative-config={"method":"mtp","num_speculative_tokens":3}'
-      - '--override-generation-config={"temperature":0.7,"top_p":0.80,"top_k":20,"min_p":0.0,"presence_penalty":1.2,"repetition_penalty":1.0}'
+      # k=3 runs 3x forward on the single MTP layer (vLLM warns this lowers acceptance).
+      # k=1 is the safe default for a hybrid; bump to 2/3 if acceptance holds. Override:
+      # MTP_K=3
+      - '--speculative-config={"method":"mtp","num_speculative_tokens":${MTP_K:-1}}'
+      # Instruct (non-thinking) sampling per Qwen3.8 README Best Practices:
+      # temperature=0.7, top_p=0.80, top_k=20, presence_penalty=1.5 (anti-repetition).
+      # NOTE: presence_penalty is a no-op while MTP is on (spec-decode ignores it) -
+      # that's why the loops weren't suppressed. Override: PRESENCE_PENALTY=1.5
+      - '--override-generation-config={"temperature":0.7,"top_p":0.80,"top_k":20,"min_p":0.0,"presence_penalty":${PRESENCE_PENALTY:-1.5},"repetition_penalty":1.0}'
       - --host=0.0.0.0
       - --port=8000
