@@ -2,7 +2,7 @@
 # VRAM: ~14.5GB weights/card + ~9GB KV/card @ 0.92 util = fits 24GB cleanly
 services:
   vllm-qwen38-27b:
-    image: vllm/vllm-openai:latest
+    image: vllm/vllm-openai:v0.27.1
     container_name: vllm-qwen38-27b-fp8
     restart: unless-stopped
     ports:
@@ -11,16 +11,20 @@ services:
       - /home/app/models/Qwen/Qwen3.8-27B-FP8:/models/Qwen3.8-27B-FP8:ro
       - /home/app/cache/vllm/torch_compile:/root/.cache/vllm/torch_compile_cache
       - /home/app/cache/vllm/triton:/root/.triton/cache
-      - /home/app/models/froggeric/Qwen-Fixed-Chat-Templates/chat_template.jinja:/etc/qwen-froggeric-chat-template.jinja:ro
+      # - /home/app/models/froggeric/Qwen-Fixed-Chat-Templates/chat_template.jinja:/etc/qwen-froggeric-chat-template.jinja:ro
     environment:
-      - NCCL_CUMEM_ENABLE=0
-      - NCCL_P2P_DISABLE=1
-      - NVIDIA_VISIBLE_DEVICES=all
+      - SPEC
       - OMP_NUM_THREADS=1
-      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True,max_split_size_mb:512
+      - NCCL_P2P_DISABLE=1
+      - VLLM_USE_DEEP_GEMM
+      - NCCL_CUMEM_ENABLE=0
+      - VLLM_SKIP_P2P_CHECK
+      - CUDA_VISIBLE_DEVICES
       - VLLM_NO_USAGE_STATS=1
-      - VLLM_USE_FLASHINFER_SAMPLER=1
+      - NVIDIA_VISIBLE_DEVICES=all
+      - VLLM_USE_FLASHINFER_SAMPLER=0
       - VLLM_WORKER_MULTIPROC_METHOD=spawn
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True,max_split_size_mb:512
     shm_size: "16gb"
     ipc: host
     deploy:
@@ -43,15 +47,16 @@ services:
       - --enable-chunked-prefill
       - --reasoning-parser=qwen3
       - --tensor-parallel-size=2
+      - --pipeline-parallel-size=1
       - --enable-auto-tool-choice
       - --disable-custom-all-reduce
       - --gpu-memory-utilization=0.92
       - --max-num-batched-tokens=8192
       - --tool-call-parser=qwen3_coder
-      - --kv-cache-dtype=int8_per_token_head
-      - --chat-template=/etc/qwen-froggeric-chat-template.jinja
-      - '--default-chat-template-kwargs={"enable_thinking": false}'
+      - --kv-cache-dtype=fp8
+      # - --chat-template=/etc/qwen-froggeric-chat-template.jinja
+      - '--default-chat-template-kwargs={"enable_thinking": ${ENABLE_THINKING:-false}}'
       - '--speculative-config={"method":"mtp","num_speculative_tokens":3}'
-      - '--override-generation-config={"temperature":0.6,"top_p":0.95,"top_k":20,"min_p":0.0,"repetition_penalty":1.0}'
+      - '--override-generation-config={"temperature":0.7,"top_p":0.80,"top_k":20,"min_p":0.0,"repetition_penalty":1.5,"repetition_penalty":1.0}'
       - --host=0.0.0.0
       - --port=8000
