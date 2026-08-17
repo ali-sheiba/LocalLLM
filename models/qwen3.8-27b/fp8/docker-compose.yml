@@ -13,13 +13,12 @@ services:
       - /home/app/cache/vllm/triton:/root/.triton/cache
       # - /home/app/models/froggeric/Qwen-Fixed-Chat-Templates/chat_template.jinja:/etc/qwen-froggeric-chat-template.jinja:ro
     environment:
-      - SPEC
       - OMP_NUM_THREADS=1
       - NCCL_P2P_DISABLE=1
-      - VLLM_USE_DEEP_GEMM
-      - NCCL_CUMEM_ENABLE=0
-      - VLLM_SKIP_P2P_CHECK
-      - CUDA_VISIBLE_DEVICES
+      # - VLLM_USE_DEEP_GEMM
+      - NCCL_CUMEM_HOST_ENABLE=0
+      # - VLLM_SKIP_P2P_CHECK
+      # - CUDA_VISIBLE_DEVICES
       - VLLM_NO_USAGE_STATS=1
       - NVIDIA_VISIBLE_DEVICES=all
       - VLLM_USE_FLASHINFER_SAMPLER=0
@@ -57,6 +56,6 @@ services:
       # - --chat-template=/etc/qwen-froggeric-chat-template.jinja
       - '--default-chat-template-kwargs={"enable_thinking": ${ENABLE_THINKING:-false}}'
       - '--speculative-config={"method":"mtp","num_speculative_tokens":3}'
-      - '--override-generation-config={"temperature":0.7,"top_p":0.80,"top_k":20,"min_p":0.0,"repetition_penalty":1.5,"repetition_penalty":1.0}'
+      - '--override-generation-config={"temperature":0.7,"top_p":0.80,"top_k":20,"min_p":0.0,"presence_penalty":1.2,"repetition_penalty":1.0}'
       - --host=0.0.0.0
       - --port=8000
