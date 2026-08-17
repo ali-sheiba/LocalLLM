@@ -33,7 +33,7 @@ services:
 
     entrypoint: ["vllm", "serve"]
     command:
-      - --model=/models/Qwen3.8-27B-INT4-AutoRound
+      - --model=/models/Qwen3.8-27B-int4-AutoRound
       - --served-model-name=qwen3.8-27b
       - --dtype=bfloat16
       - --max-num-seqs=2
