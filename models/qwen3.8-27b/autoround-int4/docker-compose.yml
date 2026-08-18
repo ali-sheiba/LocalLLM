@@ -1,26 +1,38 @@
+# vLLM — MKRWW/Qwen3.8-27B-int4-AutoRound — 2x RTX 3090, TP=2, PCIe-only
+#
+# Quality-first defaults for two parallel agentic-coding sessions:
+#   - Native 262K context and chunked prefill
+#   - Dynamic per-token/head INT8 KV scales (safer than uncalibrated FP8 on SM86)
+#   - Prefix caching for repeated system prompts and tool schemas
+#   - MTP disabled: avoids hybrid recurrent-cache corruption and keeps all sampling
+#     penalties active; benchmark MTP separately before enabling it here
+#   - Non-thinking tool use by default; set ENABLE_THINKING=true for hard tasks and
+#     give the request a generous max_tokens budget
+#
+# The checkpoint includes its own multimodal tower and chat template. Vision is kept
+# available for screenshots/diagrams, but capped to two images per request.
 services:
   vllm-qwen38-27b-autoround-int4:
-    # image: vllm/vllm-openai:v0.22.0
     image: vllm/vllm-openai:v0.27.1
     container_name: vllm-qwen38-27b-autoround-int4
     restart: unless-stopped
     ports:
-      - "8080:8000"
+      - "${PORT:-8080}:8000"
     volumes:
-      - /home/app/models/Avuja/Qwen3.8-27B-int4-AutoRound:/models/Qwen3.8-27B-int4-AutoRound:ro
+      - /home/app/models/MKRWW/Qwen3.8-27B-int4-AutoRound:/models/Qwen3.8-27B-int4-AutoRound:ro
       - /home/app/cache/vllm/torch_compile:/root/.cache/vllm/torch_compile_cache
       - /home/app/cache/vllm/triton:/root/.triton/cache
-
     environment:
-      - NCCL_CUMEM_ENABLE=0
-      - NCCL_P2P_DISABLE=1
-      - NVIDIA_VISIBLE_DEVICES=all
-      - OMP_NUM_THREADS=1
-      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True,max_split_size_mb:512
-      - VLLM_NO_USAGE_STATS=1
-      - VLLM_USE_FLASHINFER_SAMPLER=1
-      - VLLM_WORKER_MULTIPROC_METHOD=spawn
-      - CUDA_VISIBLE_DEVICES
+      # Both GPUs are on NUMA node 0 but cross PCIe host bridges (no NVLink).
+      CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-0,1}
+      NVIDIA_VISIBLE_DEVICES: all
+      NCCL_P2P_DISABLE: "1"
+      NCCL_CUMEM_ENABLE: "0"
+      OMP_NUM_THREADS: "1"
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True,max_split_size_mb:512
+      VLLM_NO_USAGE_STATS: "1"
+      VLLM_USE_FLASHINFER_SAMPLER: "0"
+      VLLM_WORKER_MULTIPROC_METHOD: spawn
     shm_size: "16gb"
     ipc: host
     deploy:
@@ -34,26 +46,46 @@ services:
     entrypoint: ["vllm", "serve"]
     command:
       - --model=/models/Qwen3.8-27B-int4-AutoRound
-      - --served-model-name=qwen3.8-27b
-      - --dtype=bfloat16
-      - --max-num-seqs=2
+      - --served-model-name=${SERVED_MODEL_NAME:-qwen3.8-27b}
       - --trust-remote-code
-      - --max-model-len=262144
-      - --enable-prefix-caching
-      - --enable-chunked-prefill
-      - --reasoning-parser=qwen3
-      - --tensor-parallel-size=2
+      - --dtype=bfloat16
+      # The checkpoint is packed as auto_round:auto_gptq. This explicit value is
+      # also the invocation recommended by the checkpoint author.
       - --quantization=auto_round
-      - --kv-cache-dtype=fp8_e4m3
-      - --enable-auto-tool-choice
+
+      # Maximum useful context on this checkpoint. vLLM may preempt/recompute when
+      # two sessions simultaneously approach the full per-request limit.
+      - --max-model-len=${MAX_MODEL_LEN:-262144}
+      - --max-num-seqs=${MAX_NUM_SEQS:-2}
+      - --gpu-memory-utilization=${GPU_MEMORY_UTILIZATION:-0.92}
+      # Ampere stores FP8 but has no native FP8 compute, and this checkpoint has no
+      # calibrated KV scales. Dynamic INT8 preserves the same 1-byte KV footprint.
+      - --kv-cache-dtype=${KV_CACHE_DTYPE:-int8_per_token_head}
+
+      # Prefix reuse matters for large coding-agent system prompts/tool schemas.
+      # Keep MAMBA_CACHE_MODE=align when enabled; use none when disabling it.
+      - "${PREFIX_CACHE_ARG:---enable-prefix-caching}"
+      - --mamba-cache-mode=${MAMBA_CACHE_MODE:-align}
+      - --enable-chunked-prefill
+      - --max-num-batched-tokens=${MAX_NUM_BATCHED_TOKENS:-8192}
+      - --async-scheduling
+
+      - --tensor-parallel-size=2
       - --pipeline-parallel-size=1
+      # NCCL is more reliable than vLLM's custom all-reduce on this PCIe-only pair.
       - --disable-custom-all-reduce
-      - --gpu-memory-utilization=0.90
-      - --max-num-batched-tokens=8192
-      - --tool-call-parser=qwen3_coder
 
-      - '--default-chat-template-kwargs={"enable_thinking": false}'
+      - --enable-auto-tool-choice
+      - --tool-call-parser=${TOOL_PARSER:-qwen3_coder}
+      - --reasoning-parser=qwen3
+      - --chat-template=/models/Qwen3.8-27B-int4-AutoRound/chat_template.jinja
+      - '--default-chat-template-kwargs={"enable_thinking": ${ENABLE_THINKING:-false}, "reasoning_effort": "${REASONING_EFFORT:-xhigh}"}'
+      - '--limit-mm-per-prompt={"image":2,"video":0}'
 
-      - '--override-generation-config={"temperature":0.7,"top_p":0.80,"top_k":20,"min_p":0.0,"repetition_penalty":1.0,"presence_penalty":1.5}'
+      # Ignore the checkpoint's generic generation_config (temperature=1.0) and use
+      # Qwen's non-thinking instruct settings tuned for reliable tool use.
+      - --generation-config=vllm
+      - '--override-generation-config={"temperature":${TEMPERATURE:-0.7},"top_p":${TOP_P:-0.80},"top_k":${TOP_K:-20},"min_p":${MIN_P:-0.0},"presence_penalty":${PRESENCE_PENALTY:-1.5},"repetition_penalty":${REPETITION_PENALTY:-1.0}}'
+
       - --host=0.0.0.0
       - --port=8000
