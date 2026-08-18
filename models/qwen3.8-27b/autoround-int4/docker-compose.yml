@@ -10,7 +10,7 @@ services:
       - /home/app/models/Avuja/Qwen3.8-27B-int4-AutoRound:/models/Qwen3.8-27B-int4-AutoRound:ro
       - /home/app/cache/vllm/torch_compile:/root/.cache/vllm/torch_compile_cache
       - /home/app/cache/vllm/triton:/root/.triton/cache
-      - /home/app/models/froggeric/Qwen-Fixed-Chat-Templates/chat_template.jinja:/etc/qwen-froggeric-chat-template.jinja:ro
+
     environment:
       - NCCL_CUMEM_ENABLE=0
       - NCCL_P2P_DISABLE=1
@@ -51,9 +51,9 @@ services:
       - --gpu-memory-utilization=0.90
       - --max-num-batched-tokens=8192
       - --tool-call-parser=qwen3_coder
-      - --chat-template=/etc/qwen-froggeric-chat-template.jinja
+
       - '--default-chat-template-kwargs={"enable_thinking": false}'
-      - '--speculative-config={"method":"mtp","num_speculative_tokens":3}'
+
       - '--override-generation-config={"temperature":0.7,"top_p":0.80,"top_k":20,"min_p":0.0,"repetition_penalty":1.0,"presence_penalty":1.5}'
       - --host=0.0.0.0
       - --port=8000
