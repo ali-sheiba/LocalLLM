@@ -4,4 +4,4 @@ models/**/.env
 models/**/.env.local
 experiments/**/.env
 experiments/**/.env.local
-benchmarks/results/
+__pycache__/

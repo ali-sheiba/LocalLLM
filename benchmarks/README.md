@@ -1,45 +1,106 @@
-# Benchmarking
+# LocalLLM Benchmark Records
 
-How we evaluate stack configurations and track which performs best.
+This directory is the durable experiment ledger for LocalLLM serving stacks. Each benchmark run captures tool-calling quality, throughput for one or two long-running coding agents, the effective container configuration, and relevant GPU/power state.
 
-## Scoring Categories
+## Run a benchmark
 
-Each stack is scored across these dimensions:
+Start the intended stack first, then run the recorder from the LocalLLM repository:
 
-| Category | Weight | Description |
-|---|---|---|
-| **Tool Calling** | High | Ability to parse and execute tool calls correctly |
-| **Instruction Following** | High | Adherence to complex instructions and constraints |
-| **Structural Output** | High | Producing valid JSON, XML, markdown tables, etc. |
-| **Data Extraction** | Medium | Extracting structured data from unstructured text |
-| **Reasoning / Math** | Medium | Logical reasoning and computation |
-| **Bug Finding** | Medium | Identifying issues in code |
-| **Coding (aider)** | High | Real-world coding tasks via aider benchmarks |
-| **Context Utilization** | Medium | Effectiveness with long context windows |
-
-## Running Benchmarks
-
-1. Start the stack you want to evaluate
-2. Run the benchmark suite (see `scripts/` for automated runs)
-3. Save results to `benchmarks/results/<stack-name>-<date>.md`
-4. Update `benchmarks/scoring.md` with the scores
-
-## Result Format
-
-```markdown
-## <Stack Name> — <Date>
-
-- Engine: <vLLM / llama.cpp>
-- Model: <model name>
-- Quantization: <quant>
-- Context: <size>
-- Config: <key deviations from default>
-
-### Scores
-
-| Category | Score | Max |
-|---|---|---|
-| Tool Calling | X | 20 |
-| ... | ... | ... |
-| **Total** | X | 150 |
+```sh
+./helpers/run-benchmark.py \
+  --stack models/qwen3.6-27b/autoround-int4/docker-compose.yml \
+  --service vllm-qwen36-27b-dual \
+  --gpu-host 192.168.0.10 \
+  --gpu-user root \
+  --power-limit 350
 ```
+
+The standard protocol is equivalent in scope to the usual tool-eval workload:
+
+- full public `tool-eval-bench` suite with seed `42`;
+- performance depths `0,8192,32768`;
+- performance concurrency `1,2`;
+- `pp=2048`, `tg=128`, three measurements per point;
+- generation-latency mode.
+
+The script runs llama-benchy directly so its complete JSON result is retained, then runs tool-eval-bench for the quality result. Both raw results become part of the run's `run.json`.
+
+### Common overrides
+
+```sh
+# The benchmark service is already running; model is discovered from /v1/models.
+./helpers/run-benchmark.py \
+  --stack models/qwen3.6-27b/fp8/docker-compose.yml \
+  --service vllm-qwen36-27b \
+  --gpu-host 192.168.0.10 \
+  --power-limit 350 \
+  --depth "0,16384,32768" \
+  --tg 1024 \
+  --runs 5
+
+# Start only the declared service before testing. This never stops another stack.
+./helpers/run-benchmark.py \
+  --stack models/qwen3.6-27b/fp8/docker-compose.yml \
+  --service vllm-qwen36-27b \
+  --start
+```
+
+Use `--model`, `--model-source`, or `--tokenizer` when automatic discovery is insufficient. `--model-source` should be the actual host model path or an HF-style `author/model` identifier. An optional API key is read from `TOOL_EVAL_API_KEY` by default and is never written to a run record.
+
+> **Stack safety:** GPU stacks share the same hardware and normally port `8080`. The benchmark runner does not stop a different stack. Ensure the intended stack is the only GPU workload before running a benchmark.
+
+## GPU power policy
+
+Power control is opt-in: omit `--power-limit` to observe hardware state without changing it. When a limit is requested, the runner uses local `nvidia-smi` or SSH (`--gpu-host`, `--gpu-user`) to:
+
+1. capture each selected GPU's original power limit;
+2. set the requested limit and run the benchmarks;
+3. restore every original limit, including after normal benchmark failures, `Ctrl+C`, and `SIGTERM`.
+
+The current power benchmark helper restores to a configured maximum. The recorder instead restores the **exact values that were present before the run**. A host crash or `SIGKILL` cannot execute cleanup; the recorded `power_policy.manual_recovery_command` in `run.json` is the recovery command in that case.
+
+## Artifact layout
+
+```text
+benchmarks/
+├── INDEX.md
+├── index.json
+├── runs/
+│   └── YYYY/MM/<run-id>/
+│       ├── report.md
+│       └── run.json
+└── comparisons/
+```
+
+A run directory is immutable after completion and intentionally contains only two files:
+
+| File | Purpose |
+|---|---|
+| `report.md` | Human- and LLM-readable summary of stack identity, power/hardware, quality, and the c1/c2 performance matrix. |
+| `run.json` | Canonical structured evidence: commands, raw benchmark results, sanitized effective container configuration, tool versions, Docker/Git identity, GPU snapshots, and power restoration state. |
+
+`run.json` redacts environment values whose names contain `key`, `token`, `secret`, `password`, `credential`, or `auth`.
+
+## Index and comparisons
+
+`helpers/run-benchmark.py` regenerates `INDEX.md` and `index.json` after recording a run. To rebuild them manually:
+
+```sh
+python3 helpers/build-benchmark-index.py --index
+```
+
+The index reports quality, completion/safety state, and throughput at the most relevant depth/concurrency points. It deliberately does not create one arbitrary combined score: compare quality and c1/c2 responsiveness separately.
+
+Write intentional analyses under `benchmarks/comparisons/`. The project-local `benchmark-analysis` skill validates protocol, effective stack configuration, hardware, and power equivalence before an LLM claims that a run is faster or better.
+
+## Comparability
+
+Two runs are directly comparable only when they use the same:
+
+- benchmark protocol and tool/evaluator versions;
+- model source, quantization, serving engine/image, chat/tool configuration, and sampling settings;
+- effective server command and relevant environment settings;
+- GPU topology, driver/runtime, and power policy;
+- performance depths, token counts, latency mode, and measurement repetitions.
+
+At concurrency 2, report both aggregate generation throughput and **per-agent** generation throughput. Aggregate throughput can rise even when each coding agent becomes less responsive.

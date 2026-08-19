@@ -1,22 +1,7 @@
 # Benchmark Scoring
 
-Latest scores per category across all evaluated stacks. Update after each benchmark run.
+`benchmarks/INDEX.md` is the generated current index for all recorded runs.
 
-## Current Best Per Category
+This file is retained as a migration pointer for the former manual 150-point scorecard. LocalLLM now records the native `tool-eval-bench` quality score, category scores, completion rate, safety warnings, and the c1/c2 throughput matrix in each immutable run directory.
 
-| Category | Stack | Score | Date |
-|---|---|---|---|
-| Tool Calling | _untested_ | - | - |
-| Instruction Following | _untested_ | - | - |
-| Structural Output | _untested_ | - | - |
-| Data Extraction | _untested_ | - | - |
-| Reasoning / Math | _untested_ | - | - |
-| Bug Finding | _untested_ | - | - |
-| Coding (aider) | _untested_ | - | - |
-| Context Utilization | _untested_ | - | - |
-
-## Overall Leaderboard
-
-| Rank | Stack | Total | Date |
-|---|---|---|---|
-| - | _untested_ | - | - |
+Do not maintain a separate manual global leaderboard. A meaningful comparison requires matching benchmark protocol, model/stack configuration, hardware, and power conditions. Use `benchmarks/comparisons/` for evidence-based comparisons between compatible runs.
