@@ -10,8 +10,6 @@ Start the intended stack first, then run the recorder from the LocalLLM reposito
 ./helpers/run-benchmark.py \
   --stack models/qwen3.6-27b/autoround-int4/docker-compose.yml \
   --service vllm-qwen36-27b-dual \
-  --gpu-host 192.168.0.10 \
-  --gpu-user root \
   --power-limit 350
 ```
 
@@ -32,7 +30,6 @@ The script runs llama-benchy directly so its complete JSON result is retained, t
 ./helpers/run-benchmark.py \
   --stack models/qwen3.6-27b/fp8/docker-compose.yml \
   --service vllm-qwen36-27b \
-  --gpu-host 192.168.0.10 \
   --power-limit 350 \
   --depth "0,16384,32768" \
   --tg 1024 \
@@ -51,13 +48,16 @@ Use `--model`, `--model-source`, or `--tokenizer` when automatic discovery is in
 
 ## GPU power policy
 
-Power control is opt-in: omit `--power-limit` to observe hardware state without changing it. When a limit is requested, the runner uses local `nvidia-smi` or SSH (`--gpu-host`, `--gpu-user`) to:
+Power control is opt-in: omit `--power-limit` to observe hardware state without changing it. When a limit is requested, the runner calls [`helpers/set-gpu-power-limit.sh`](../helpers/set-gpu-power-limit.sh) with only the requested wattage.
 
-1. capture each selected GPU's original power limit;
-2. set the requested limit and run the benchmarks;
-3. restore every original limit, including after normal benchmark failures, `Ctrl+C`, and `SIGTERM`.
+The helper is deliberately narrow:
 
-The current power benchmark helper restores to a configured maximum. The recorder instead restores the **exact values that were present before the run**. A host crash or `SIGKILL` cannot execute cleanup; the recorded `power_policy.manual_recovery_command` in `run.json` is the recovery command in that case.
+- it connects to the power-management host, `root@192.168.0.10`, over SSH;
+- it accepts exactly one positive integer wattage;
+- it refuses values above the `350W` safety maximum;
+- it changes every GPU on that host.
+
+The benchmark runner itself collects `nvidia-smi` telemetry locally inside the LXC. Before calling the helper, it captures that local GPU state and refuses a capped run unless the benchmark stack owns every detected GPU and their previous limits match. This guarantees that a one-value helper can restore the original cap after normal benchmark failures, `Ctrl+C`, and `SIGTERM`. An LXC crash or `SIGKILL` cannot execute cleanup; the recorded `power_policy.manual_recovery_command` in `run.json` is the recovery command in that case.
 
 ## Artifact layout
 

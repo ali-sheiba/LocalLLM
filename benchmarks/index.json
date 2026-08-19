@@ -1,5 +1,32 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-19T08:13:00.230426+00:00",
-  "runs": []
+  "generated_at": "2026-08-19T08:32:17.856989+00:00",
+  "runs": [
+    {
+      "run_id": "20260819T081437Z-qwen-qwen3-6-27b-fp8-dc1824cf",
+      "status": "completed",
+      "started_at": "2026-08-19T08:14:37.346200+00:00",
+      "protocol": "tool-eval-69-perf-v1",
+      "comparison_key": "Qwen/Qwen3.6-27B-FP8|tool-eval-69-perf-v1|NVIDIA GeForce RTX 3090,NVIDIA GeForce RTX 3090",
+      "model": "Qwen/Qwen3.6-27B-FP8",
+      "served_model": "qwen3.8-27b",
+      "engine": "auto-detected",
+      "quality_score": 88,
+      "completion_rate": null,
+      "safety_warnings": 1,
+      "report": "runs/2026/08/20260819T081437Z-qwen-qwen3-6-27b-fp8-dc1824cf/report.md",
+      "d0_c1_tg_tps": 64.79022044255103,
+      "d0_c1_per_agent_tg_tps": 64.79022044255103,
+      "d0_c2_tg_tps": 73.65822107788226,
+      "d0_c2_per_agent_tg_tps": 36.82911053894113,
+      "d8192_c1_tg_tps": 58.77391612584031,
+      "d8192_c1_per_agent_tg_tps": 58.77391612584031,
+      "d8192_c2_tg_tps": 28.292787984826685,
+      "d8192_c2_per_agent_tg_tps": 14.146393992413342,
+      "d32768_c1_tg_tps": 47.14117924546385,
+      "d32768_c1_per_agent_tg_tps": 47.14117924546385,
+      "d32768_c2_tg_tps": 8.286371283899415,
+      "d32768_c2_per_agent_tg_tps": 4.1431856419497075
+    }
+  ]
 }

@@ -29,6 +29,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent.parent
 BENCHMARKS = ROOT / "benchmarks"
 REPORTER = ROOT / "helpers" / "build-benchmark-index.py"
+POWER_LIMIT_SCRIPT = ROOT / "helpers" / "set-gpu-power-limit.sh"
 SENSITIVE_ENV = re.compile(r"(?:key|token|secret|password|credential|auth)", re.IGNORECASE)
 GPU_FIELDS = [
     "index",
@@ -263,17 +264,11 @@ def docker_metadata() -> dict[str, Any]:
     return {"version": payload, "compose_version": compose.stdout.strip() if compose.returncode == 0 else None}
 
 
-def gpu_command(host: str | None, user: str, remote: str) -> list[str]:
-    if host:
-        return ["ssh", "-o", "ConnectTimeout=10", "-o", "StrictHostKeyChecking=accept-new", f"{user}@{host}", remote]
-    return ["sh", "-c", remote]
-
-
-def gpu_snapshot(host: str | None, user: str) -> dict[str, Any]:
+def gpu_snapshot() -> dict[str, Any]:
     query = ",".join(GPU_FIELDS)
-    command = gpu_command(host, user, f"nvidia-smi --query-gpu={query} --format=csv,noheader,nounits")
+    command = ["nvidia-smi", f"--query-gpu={query}", "--format=csv,noheader,nounits"]
     completed = run_command(command, check=False)
-    result: dict[str, Any] = {"target": f"{user}@{host}" if host else "local", "gpus": []}
+    result: dict[str, Any] = {"target": "local", "gpus": []}
     if completed.returncode != 0:
         result["error"] = trimmed_output(completed.stderr or completed.stdout)
         return result
@@ -331,9 +326,13 @@ def validate_power_limit(snapshot: dict[str, Any], gpu_ids: list[str], watts: fl
             )
 
 
-def set_power_limit(host: str | None, user: str, gpu_id: str, watts: float) -> None:
-    rendered = str(int(watts)) if watts.is_integer() else str(watts)
-    run_command(gpu_command(host, user, f"nvidia-smi -i {shlex.quote(gpu_id)} -pl {shlex.quote(rendered)}"))
+def set_power_limit(watts: int | float) -> None:
+    if not POWER_LIMIT_SCRIPT.is_file():
+        raise BenchmarkError(f"Power-limit helper does not exist: {POWER_LIMIT_SCRIPT}")
+    numeric_watts = float(watts)
+    if not numeric_watts.is_integer():
+        raise BenchmarkError(f"Power limit must be a whole number of watts, got {watts}")
+    run_command([str(POWER_LIMIT_SCRIPT), str(int(numeric_watts))])
 
 
 def fetch_served_model(base_url: str, api_key: str | None) -> str:
@@ -424,9 +423,7 @@ def main() -> int:
     parser.add_argument("--tg", type=int, default=128)
     parser.add_argument("--runs", type=int, default=3, help="llama-benchy measurement iterations per point")
     parser.add_argument("--latency-mode", choices=("api", "generation", "none"), default="generation")
-    parser.add_argument("--gpu-host", help="Remote GPU host; omit to invoke nvidia-smi locally")
-    parser.add_argument("--gpu-user", default="root")
-    parser.add_argument("--power-limit", type=float, help="Temporarily set selected GPUs to this watt limit; exact prior limits are restored")
+    parser.add_argument("--power-limit", type=int, help="Temporarily set all benchmark-host GPUs to this watt limit; exact prior limits are restored")
     args = parser.parse_args()
 
     compose_file = Path(args.stack).expanduser()
@@ -485,25 +482,39 @@ def main() -> int:
         run_path.mkdir(parents=True, exist_ok=False)
         log(f"Recording run {run_path.relative_to(ROOT)} for model {served_name}")
 
-        snapshot_target = f"{args.gpu_user}@{args.gpu_host}" if args.gpu_host else "local host"
-        log(f"Capturing pre-run GPU state from {snapshot_target}")
-        hardware["before"] = gpu_snapshot(args.gpu_host, args.gpu_user)
+        snapshot_target = "local"
+        log("Capturing pre-run GPU state")
+        hardware["before"] = gpu_snapshot()
         selected = selected_gpu_ids(container, hardware["before"])
         if args.power_limit is not None:
+            all_gpus = {
+                str(gpu.get("index"))
+                for gpu in hardware["before"].get("gpus", [])
+                if gpu.get("index") is not None
+            }
+            if not all_gpus or set(selected) != all_gpus:
+                raise BenchmarkError(
+                    "The power-limit helper changes every GPU on the benchmark host; "
+                    "refusing to change power while the stack does not own every detected GPU."
+                )
             before_limits = power_limits(hardware["before"], selected)
+            if len(set(before_limits.values())) != 1:
+                raise BenchmarkError(
+                    "The selected GPUs have different existing power limits; the one-value power helper "
+                    "cannot restore them safely. Normalize the limits first."
+                )
             validate_power_limit(hardware["before"], selected, args.power_limit)
             power.update(
                 {
-                    "target": f"{args.gpu_user}@{args.gpu_host}" if args.gpu_host else "local",
+                    "target": snapshot_target,
                     "selected_gpus": selected,
                     "requested_watts": args.power_limit,
                     "before_watts": before_limits,
                     "restore_status": "pending",
                 }
             )
-            log(f"Applying {args.power_limit:g}W power limit to GPU(s): {', '.join(selected)}")
-            for gpu_id in selected:
-                set_power_limit(args.gpu_host, args.gpu_user, gpu_id, args.power_limit)
+            log(f"Applying {args.power_limit:g}W power limit to every benchmark-host GPU")
+            set_power_limit(args.power_limit)
             power["applied"] = True
 
         bench_base_url = base_url if base_url.endswith("/v1") else f"{base_url}/v1"
@@ -583,9 +594,9 @@ def main() -> int:
         if args.power_limit is not None and power.get("before_watts"):
             restored: dict[str, float] = {}
             try:
-                for gpu_id, watts in power["before_watts"].items():
-                    set_power_limit(args.gpu_host, args.gpu_user, gpu_id, float(watts))
-                    restored[gpu_id] = float(watts)
+                original_watts = next(iter(power["before_watts"].values()))
+                set_power_limit(float(original_watts))
+                restored = {gpu_id: float(watts) for gpu_id, watts in power["before_watts"].items()}
                 power["restored_watts"] = restored
                 power["restore_status"] = "succeeded"
             except BenchmarkError as exc:
@@ -593,15 +604,12 @@ def main() -> int:
                 power["restore_error"] = str(exc)
                 return_code = return_code or 1
                 status = "failed"
-            target = f"{args.gpu_user}@{args.gpu_host}" if args.gpu_host else "local"
-            commands_for_recovery = "; ".join(
-                f"nvidia-smi -i {gpu} -pl {int(watts) if float(watts).is_integer() else watts}"
-                for gpu, watts in power["before_watts"].items()
-            )
-            power["manual_recovery_command"] = f"ssh {target} {shlex.quote(commands_for_recovery)}" if args.gpu_host else commands_for_recovery
+            original_watts = next(iter(power["before_watts"].values()))
+            rendered_watts = int(original_watts) if float(original_watts).is_integer() else original_watts
+            power["manual_recovery_command"] = f"./helpers/set-gpu-power-limit.sh {rendered_watts}"
 
         log("Capturing post-run GPU state")
-        hardware["after"] = gpu_snapshot(args.gpu_host, args.gpu_user)
+        hardware["after"] = gpu_snapshot()
         if run_path is not None:
             comparison_hardware = ",".join(
                 str(gpu.get("name", "unknown")) for gpu in hardware.get("before", {}).get("gpus", [])
