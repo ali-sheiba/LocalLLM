@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import http.client
 import json
 import os
 import re
@@ -357,7 +358,17 @@ def fetch_served_model(base_url: str, api_key: str | None) -> str:
     try:
         with urllib.request.urlopen(request, timeout=15) as response:  # noqa: S310
             data = json.load(response)
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError) as exc:
+    except (
+        urllib.error.URLError,
+        urllib.error.HTTPError,
+        http.client.HTTPException,
+        OSError,
+        TimeoutError,
+        json.JSONDecodeError,
+    ) as exc:
+        # During vLLM initialization the port can accept a connection and then
+        # reset it while workers are still loading. Treat every transport-level
+        # failure as a not-ready response; wait_for_served_model owns retries.
         raise BenchmarkError(f"Could not discover served model from {url}: {exc}") from exc
     models = data.get("data", []) if isinstance(data, dict) else []
     if not models or not isinstance(models[0], dict) or not models[0].get("id"):
@@ -367,13 +378,26 @@ def fetch_served_model(base_url: str, api_key: str | None) -> str:
 
 def wait_for_served_model(base_url: str, api_key: str | None, timeout_seconds: float) -> str:
     deadline = time.monotonic() + timeout_seconds
+    started = time.monotonic()
     last_error: BenchmarkError | None = None
+    attempts = 0
     while time.monotonic() < deadline:
         try:
             return fetch_served_model(base_url, api_key)
         except BenchmarkError as exc:
             last_error = exc
-            time.sleep(5)
+            attempts += 1
+            elapsed = time.monotonic() - started
+            # Print the first failure and then once per 30 seconds. Large models
+            # commonly need several minutes before /v1/models is available.
+            if attempts == 1 or attempts % 6 == 0:
+                print(
+                    f"[benchmark] Server not ready after {elapsed:.0f}s/{timeout_seconds:g}s; retrying: {exc}",
+                    flush=True,
+                )
+            remaining = deadline - time.monotonic()
+            if remaining > 0:
+                time.sleep(min(5, remaining))
     detail = str(last_error) if last_error else "no response received"
     raise BenchmarkError(f"Server was not ready within {timeout_seconds:g}s: {detail}")
 
