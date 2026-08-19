@@ -102,6 +102,31 @@ For every new tuning hypothesis, copy the source profile to a new descriptive
 filename, such as `profiles/avuja-mtp-3.env`; change only the experiment's
 variables. Do not overwrite an already-benchmarked profile's assignments.
 
+### Avuja tuning matrix
+
+The initial Avuja control is `profiles/avuja.env` and completed run
+`20260819T180403Z-avuja-qwen3-8-27b-int4-autoround-c9f9fb98`: tool-eval `88`,
+c2 per-agent decode throughput `38.61` t/s at 0 context, `14.61` at 8K, and
+`4.60` at 32K. The following profiles each retain the same model, power policy,
+benchmark protocol, and base settings while changing one hypothesis:
+
+| Profile | Change | Primary measurement | Gate / risk |
+|---|---|---|---|
+| `avuja-01-gpu-util-0.94.env` | `GPU_MEMORY_UTILIZATION=0.94` | c2 8K/32K capacity | prefill OOM or reduced transient headroom |
+| `avuja-02-prefill-16384.env` | `MAX_NUM_BATCHED_TOKENS=16384` | 8K/32K TTFT and pp t/s | c2 prefill spike or instability |
+| `avuja-03-flashinfer-sampler.env` | FlashInfer sampler on | c1/c2 decode t/s | tool-call or output regression |
+| `avuja-04-fp8-kv.env` | FP8 E4M3 KV | cache-path speed | quality degradation or loops on Ampere |
+| `avuja-05-prefix-cache-align.env` | prefix cache plus Mamba `align` | repeated-agent TTFT | manual chain stability; llama-benchy uses `--no-cache` |
+| `avuja-06-tool-parser-xml.env` | `qwen3_xml` tool parser | tool-eval quality | parser/template compatibility |
+| `avuja-07-froggeric-template.env` | froggeric template | tool-eval and manual chains | template behavior divergence |
+| `avuja-08-tool-sampling-temp-0.6.env` | temperature `0.6` | wrong-argument/tool consistency | quality or completion regression |
+
+Run one profile at a time using the same command above with its profile filename.
+After every completed run, update its comment summary and compare it with the
+control before advancing. MTP is deliberately absent from this first matrix: the
+unpatched stack cannot safely toggle it, and the available two-3090 MTP evidence
+uses additional Club-3090 patches and documents a c2 OOM risk.
+
 ## Preflight and benchmark
 
 Inspect the fully resolved configuration before each run:
