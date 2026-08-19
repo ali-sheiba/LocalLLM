@@ -1,30 +1,32 @@
-# vLLM — Qwen3.8-27B FP8 (official Qwen quant) — Dual RTX 3090, TP=2, PCIe-only
-# VRAM: ~14.5GB weights/card + ~9GB KV/card @ 0.92 util = fits 24GB cleanly
+# vLLM — Qwen/Qwen3.8-27B-FP8 — dual RTX 3090 (TP=2, PCIe-only)
+#
+# Use environment overrides for benchmark sweeps. helpers/run-benchmark.py
+# records the resolved model mount, environment, and command for every run.
 services:
   vllm-qwen38-27b:
-    image: vllm/vllm-openai:v0.27.1
-    container_name: vllm-qwen38-27b-fp8
+    image: ${VLLM_IMAGE:-vllm/vllm-openai:v0.27.1}
+    container_name: ${CONTAINER_NAME:-vllm-qwen38-27b-fp8}
     restart: unless-stopped
     ports:
-      - "8080:8000"
+      - "${PORT:-8080}:8000"
     volumes:
-      - /home/app/models/Qwen/Qwen3.8-27B-FP8:/models/Qwen3.8-27B-FP8:ro
+      # Keep this destination stable: helpers/run-benchmark.py identifies model
+      # provenance from mounts below /models.
+      - ${MODEL_HOST_PATH:-/home/app/models/Qwen/Qwen3.8-27B-FP8}:/models/model:ro
+      - ${CUSTOM_CHAT_TEMPLATE_HOST_PATH:-/home/app/models/froggeric/Qwen-Fixed-Chat-Templates/chat_template.jinja}:/etc/qwen-custom-chat-template.jinja:ro
       - /home/app/cache/vllm/torch_compile:/root/.cache/vllm/torch_compile_cache
       - /home/app/cache/vllm/triton:/root/.triton/cache
-      # - /home/app/models/froggeric/Qwen-Fixed-Chat-Templates/chat_template.jinja:/etc/qwen-froggeric-chat-template.jinja:ro
     environment:
-      - OMP_NUM_THREADS=1
-      - NCCL_P2P_DISABLE=1
-      # - VLLM_USE_DEEP_GEMM
-      - NCCL_CUMEM_HOST_ENABLE=0
-      # - VLLM_SKIP_P2P_CHECK
-      # - CUDA_VISIBLE_DEVICES
-      - VLLM_NO_USAGE_STATS=1
-      - NVIDIA_VISIBLE_DEVICES=all
-      - VLLM_USE_FLASHINFER_SAMPLER=0
-      - VLLM_WORKER_MULTIPROC_METHOD=spawn
-      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True,max_split_size_mb:512
-    shm_size: "16gb"
+      CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-0,1}
+      NVIDIA_VISIBLE_DEVICES: all
+      NCCL_P2P_DISABLE: "${NCCL_P2P_DISABLE:-1}"
+      NCCL_CUMEM_ENABLE: "${NCCL_CUMEM_ENABLE:-0}"
+      OMP_NUM_THREADS: "${OMP_NUM_THREADS:-1}"
+      PYTORCH_CUDA_ALLOC_CONF: ${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True,max_split_size_mb:512}
+      VLLM_NO_USAGE_STATS: "1"
+      VLLM_USE_FLASHINFER_SAMPLER: "${VLLM_USE_FLASHINFER_SAMPLER:-0}"
+      VLLM_WORKER_MULTIPROC_METHOD: ${VLLM_WORKER_MULTIPROC_METHOD:-spawn}
+    shm_size: "${SHM_SIZE:-16gb}"
     ipc: host
     deploy:
       resources:
@@ -34,45 +36,40 @@ services:
               count: all
               capabilities: [gpu]
 
+    entrypoint: ["vllm", "serve"]
     command:
-      - --model=/models/Qwen3.8-27B-FP8
-      - --served-model-name=qwen3.8-27b
-      - --dtype=bfloat16
-      - --max-num-seqs=2
-      - --quantization=fp8
+      - --model=/models/model
+      - --served-model-name=${SERVED_MODEL_NAME:-qwen3.8-27b}
+      - --dtype=${DTYPE:-bfloat16}
+      - --quantization=${QUANTIZATION:-fp8}
       - --trust-remote-code
-      - --max-model-len=262144
-      # Prefix-caching OFF by default: MTP x prefix-cache poisons recurrent-state KV on
-      # this Qwen3.5 hybrid (48 GDN/linear-attn layers) -> garbled output, runaway loops,
-      # corrupted tool calls under 2+ parallel sessions (vllm#43559, vllm#47194, vllm#45477).
-      # vLLM marks the Mamba 'align' prefix-cache mode experimental (see startup warning).
-      # Re-enable for TTFT once the MTP x prefix-cache interaction is fixed: PREFIX_CACHE_ARG=--enable-prefix-caching
+
+      - --max-model-len=${MAX_MODEL_LEN:-262144}
+      - --max-num-seqs=${MAX_NUM_SEQS:-2}
+      - --gpu-memory-utilization=${GPU_MEMORY_UTILIZATION:-0.92}
+      # Dynamic INT8 is safer than uncalibrated FP8 KV on Ampere. Benchmark an
+      # alternate cache type by setting KV_CACHE_DTYPE explicitly.
+      - --kv-cache-dtype=${KV_CACHE_DTYPE:-int8_per_token_head}
+
+      # MTP plus prefix caching can corrupt recurrent-state KV on this hybrid
+      # architecture. Prefix caching is therefore off unless explicitly tested.
       - "${PREFIX_CACHE_ARG:---no-enable-prefix-caching}"
-      - --enable-chunked-prefill
-      - --reasoning-parser=qwen3
-      - --tensor-parallel-size=2
-      - --pipeline-parallel-size=1
-      - --enable-auto-tool-choice
-      - --disable-custom-all-reduce
-      - --gpu-memory-utilization=0.92
-      - --max-num-batched-tokens=8192
-      - --tool-call-parser=qwen3_coder
-      # fp8 KV is uncalibrated on sm86 (checkpoint ships no q/k/v scales -> vLLM falls
-      # back to 1.0, "may cause accuracy issues") and Ampere has no native FP8 compute.
-      # int8_per_token_head is what the working qwen3.6-27b/fp8 stack uses. Override:
-      # KV_CACHE_DTYPE=fp8 (or bf16) if you want to A/B test.
-      - --kv-cache-dtype
-      - "${KV_CACHE_DTYPE:-int8_per_token_head}"
-      # - --chat-template=/etc/qwen-froggeric-chat-template.jinja
+      - "${CHUNKED_PREFILL_ARG:---enable-chunked-prefill}"
+      - --max-num-batched-tokens=${MAX_NUM_BATCHED_TOKENS:-8192}
+
+      - --reasoning-parser=${REASONING_PARSER:-qwen3}
+      - --tensor-parallel-size=${TENSOR_PARALLEL_SIZE:-2}
+      - --pipeline-parallel-size=${PIPELINE_PARALLEL_SIZE:-1}
+      - "${AUTO_TOOL_CHOICE_ARG:---enable-auto-tool-choice}"
+      - "${CUSTOM_ALL_REDUCE_ARG:---disable-custom-all-reduce}"
+      - --tool-call-parser=${TOOL_PARSER:-qwen3_coder}
+      # Default: the template included by the official Qwen checkpoint. To
+      # evaluate froggeric set CHAT_TEMPLATE=/etc/qwen-custom-chat-template.jinja.
+      - --chat-template=${CHAT_TEMPLATE:-/models/model/chat_template.jinja}
       - '--default-chat-template-kwargs={"enable_thinking": ${ENABLE_THINKING:-false}}'
-      # k=3 runs 3x forward on the single MTP layer (vLLM warns this lowers acceptance).
-      # k=1 is the safe default for a hybrid; bump to 2/3 if acceptance holds. Override:
-      # MTP_K=3
       - '--speculative-config={"method":"mtp","num_speculative_tokens":${MTP_K:-1}}'
-      # Instruct (non-thinking) sampling per Qwen3.8 README Best Practices:
-      # temperature=0.7, top_p=0.80, top_k=20, presence_penalty=1.5 (anti-repetition).
-      # NOTE: presence_penalty is a no-op while MTP is on (spec-decode ignores it) -
-      # that's why the loops weren't suppressed. Override: PRESENCE_PENALTY=1.5
-      - '--override-generation-config={"temperature":0.7,"top_p":0.80,"top_k":20,"min_p":0.0,"presence_penalty":${PRESENCE_PENALTY:-1.5},"repetition_penalty":1.0}'
+
+      - --generation-config=${GENERATION_CONFIG:-vllm}
+      - '--override-generation-config={"temperature":${TEMPERATURE:-0.7},"top_p":${TOP_P:-0.80},"top_k":${TOP_K:-20},"min_p":${MIN_P:-0.0},"presence_penalty":${PRESENCE_PENALTY:-1.5},"repetition_penalty":${REPETITION_PENALTY:-1.0}}'
       - --host=0.0.0.0
       - --port=8000

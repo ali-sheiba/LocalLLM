@@ -135,8 +135,20 @@ def parse_json_output(command: list[str], *, cwd: Path | None = None) -> Any:
         raise BenchmarkError(f"Expected JSON from {shlex.join(command)}: {output[:500]}") from exc
 
 
-def discover_service(compose_file: Path, requested: str | None) -> str:
-    services = [line for line in run_command(["docker", "compose", "-f", str(compose_file), "config", "--services"]).stdout.splitlines() if line]
+def compose_command(compose_file: Path, environment_file: Path | None, *arguments: str) -> list[str]:
+    command = ["docker", "compose"]
+    if environment_file is not None:
+        command.extend(["--env-file", str(environment_file)])
+    command.extend(["-f", str(compose_file), *arguments])
+    return command
+
+
+def discover_service(compose_file: Path, requested: str | None, environment_file: Path | None) -> str:
+    services = [
+        line
+        for line in run_command(compose_command(compose_file, environment_file, "config", "--services")).stdout.splitlines()
+        if line
+    ]
     if requested:
         if requested not in services:
             raise BenchmarkError(f"Service {requested!r} is not in {compose_file}; available: {', '.join(services)}")
@@ -146,11 +158,13 @@ def discover_service(compose_file: Path, requested: str | None) -> str:
     return services[0]
 
 
-def inspect_container(compose_file: Path, service: str, start: bool) -> tuple[str, dict[str, Any]]:
+def inspect_container(
+    compose_file: Path, service: str, start: bool, environment_file: Path | None
+) -> tuple[str, dict[str, Any]]:
     if start:
-        run_command(["docker", "compose", "-f", str(compose_file), "up", "-d", service])
+        run_command(compose_command(compose_file, environment_file, "up", "-d", service))
     container_id = run_command(
-        ["docker", "compose", "-f", str(compose_file), "ps", "-q", service]
+        compose_command(compose_file, environment_file, "ps", "-q", service)
     ).stdout.strip()
     if not container_id:
         raise BenchmarkError(
@@ -406,6 +420,7 @@ def main() -> int:
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--stack", required=True, help="Compose file, relative to LocalLLM or absolute")
+    parser.add_argument("--env-file", type=Path, help="Optional Compose environment file; its path and SHA-256 are recorded, not its contents")
     parser.add_argument("--service", help="Compose service to benchmark; required for multi-service files")
     parser.add_argument("--start", action="store_true", help="Start the selected service; never stops another stack")
     parser.add_argument("--ready-timeout", type=float, default=900, help="Seconds to wait for a --start service to expose /v1/models")
@@ -432,6 +447,15 @@ def main() -> int:
     compose_file = compose_file.resolve()
     if not compose_file.is_file():
         parser.error(f"Compose file does not exist: {compose_file}")
+
+    environment_file: Path | None = args.env_file
+    if environment_file is not None:
+        environment_file = environment_file.expanduser()
+        if not environment_file.is_absolute():
+            environment_file = ROOT / environment_file
+        environment_file = environment_file.resolve()
+        if not environment_file.is_file():
+            parser.error(f"Compose environment file does not exist: {environment_file}")
 
     if not args.tool_eval_dir.is_dir():
         parser.error(f"tool-eval-bench checkout does not exist: {args.tool_eval_dir}")
@@ -462,10 +486,10 @@ def main() -> int:
 
     try:
         log(f"Resolving Compose service from {compose_file}")
-        service = discover_service(compose_file, args.service)
+        service = discover_service(compose_file, args.service, environment_file)
         if args.start:
             log(f"Starting service {service}")
-        _, inspected = inspect_container(compose_file, service, args.start)
+        _, inspected = inspect_container(compose_file, service, args.start, environment_file)
         container = compact_container(inspected)
         log(f"Using running container {container.get('name', service)}")
         api_key = os.environ.get(args.api_key_env)
@@ -626,6 +650,16 @@ def main() -> int:
                 "stack": {
                     "compose_file": str(compose_file.relative_to(ROOT)) if compose_file.is_relative_to(ROOT) else str(compose_file),
                     "compose_sha256": sha256_file(compose_file),
+                    "environment_file": (
+                        {
+                            "path": str(environment_file.relative_to(ROOT))
+                            if environment_file.is_relative_to(ROOT)
+                            else str(environment_file),
+                            "sha256": sha256_file(environment_file),
+                        }
+                        if environment_file is not None
+                        else None
+                    ),
                     "service": service,
                     "engine": args.backend or "auto-detected",
                     "container": container,

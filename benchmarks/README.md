@@ -36,13 +36,16 @@ The script runs llama-benchy directly so its complete JSON result is retained, t
   --runs 5
 
 # Start only the declared service before testing. This never stops another stack.
+# Use --env-file for a sweep-specific Compose .env; its path and SHA-256 are
+# recorded in run.json, but its contents are never copied there.
 ./helpers/run-benchmark.py \
   --stack models/qwen3.6-27b/fp8/docker-compose.yml \
+  --env-file models/qwen3.6-27b/fp8/.env \
   --service vllm-qwen36-27b \
   --start
 ```
 
-Use `--model`, `--model-source`, or `--tokenizer` when automatic discovery is insufficient. `--model-source` should be the actual host model path or an HF-style `author/model` identifier. An optional API key is read from `TOOL_EVAL_API_KEY` by default and is never written to a run record.
+Use `--model`, `--model-source`, or `--tokenizer` when automatic discovery is insufficient. `--model-source` should be the actual host model path or an HF-style `author/model` identifier. Use `--env-file` with `--start` to select a particular Compose environment file; its path and SHA-256 are recorded, but its contents are not. An optional API key is read from `TOOL_EVAL_API_KEY` by default and is never written to a run record.
 
 > **Stack safety:** GPU stacks share the same hardware and normally port `8080`. The benchmark runner does not stop a different stack. Ensure the intended stack is the only GPU workload before running a benchmark.
 
