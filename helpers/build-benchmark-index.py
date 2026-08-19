@@ -145,6 +145,8 @@ def render_report(run: dict[str, Any], run_path: Path) -> str:
         f"| Engine | `{markdown_cell(stack.get('engine'))}` |",
         f"| Compose file | `{markdown_cell(stack.get('compose_file'))}` |",
         f"| Compose SHA-256 | `{markdown_cell(stack.get('compose_sha256'))}` |",
+        f"| Compose environment file | `{markdown_cell(value_at(stack, 'environment_file', 'path'))}` |",
+        f"| Environment SHA-256 | `{markdown_cell(value_at(stack, 'environment_file', 'sha256'))}` |",
         f"| Container image | `{markdown_cell(value_at(stack, 'container', 'image'))}` |",
         f"| Image digest | `{markdown_cell(value_at(stack, 'container', 'image_digest'))}` |",
         "",
