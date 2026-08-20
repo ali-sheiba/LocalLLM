@@ -4,7 +4,7 @@ This directory is the durable experiment ledger for LocalLLM serving stacks. Eac
 
 ## Run a benchmark
 
-Start the intended stack first, then run the recorder from the LocalLLM repository:
+The recorder requires [`uv`](https://docs.astral.sh/uv/) in the invoking process's `PATH` (check with `uv --version`). If it is installed elsewhere, pass `--uv /absolute/path/to/uv`. Start the intended stack first, then run the recorder from the LocalLLM repository:
 
 ```sh
 ./helpers/run-benchmark.py \

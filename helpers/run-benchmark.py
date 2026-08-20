@@ -17,6 +17,7 @@ import re
 import secrets
 import shlex
 import signal
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -403,7 +404,10 @@ def wait_for_served_model(base_url: str, api_key: str | None, timeout_seconds: f
 
 
 def executable_version(argv: list[str], cwd: Path | None = None) -> str | None:
-    completed = run_command(argv, cwd=cwd, check=False)
+    try:
+        completed = run_command(argv, cwd=cwd, check=False)
+    except BenchmarkError:
+        return None
     return completed.stdout.strip() if completed.returncode == 0 else None
 
 
@@ -454,6 +458,7 @@ def main() -> int:
     parser.add_argument("--model-source", help="Override the HF-style source/model path inferred from container mounts")
     parser.add_argument("--tokenizer", help="Local tokenizer path passed to llama-benchy")
     parser.add_argument("--tool-eval-dir", type=Path, default=Path.home() / "bench" / "tool-eval-bench")
+    parser.add_argument("--uv", help="Path to the uv executable (defaults to uv found on PATH)")
     parser.add_argument("--api-key-env", default="TOOL_EVAL_API_KEY", help="Environment variable containing an optional API key")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--depth", default="0,8192,32768")
@@ -484,6 +489,17 @@ def main() -> int:
     if not args.tool_eval_dir.is_dir():
         parser.error(f"tool-eval-bench checkout does not exist: {args.tool_eval_dir}")
 
+    uv_executable = args.uv or shutil.which("uv")
+    if not uv_executable:
+        parser.error(
+            "Required executable 'uv' was not found on PATH. Install uv, add its directory "
+            "to PATH, or pass --uv /absolute/path/to/uv."
+        )
+    uv_path = Path(uv_executable).expanduser()
+    if not uv_path.is_file() or not os.access(uv_path, os.X_OK):
+        parser.error(f"uv executable is not runnable: {uv_path}")
+    uv_executable = str(uv_path.resolve())
+
     commands: list[dict[str, Any]] = []
     power: dict[str, Any] = {"enabled": args.power_limit is not None, "restore_status": "not-needed"}
     hardware: dict[str, Any] = {}
@@ -496,7 +512,7 @@ def main() -> int:
     model: dict[str, str | None] = {"host_path": args.model_source, "hf_repository": None, "served_name": served_name}
     container: dict[str, Any] = {}
     base_url = args.base_url.rstrip("/")
-    tool_prefix = ["uv", "run", "--extra", "perf"]
+    tool_prefix = [uv_executable, "run", "--extra", "perf"]
     return_code = 0
     interrupted = False
 
@@ -703,7 +719,7 @@ def main() -> int:
                 "tooling": {
                     "tool_eval_checkout": str(args.tool_eval_dir),
                     "tool_eval_git_commit": run_command(["git", "rev-parse", "HEAD"], cwd=args.tool_eval_dir, check=False).stdout.strip() or None,
-                    "uv_version": executable_version(["uv", "--version"]),
+                    "uv_version": executable_version([uv_executable, "--version"]),
                     "llama_benchy_version": executable_version(tool_prefix + ["llama-benchy", "--version"], cwd=args.tool_eval_dir),
                 },
                 "docker": docker_metadata(),
