@@ -116,6 +116,11 @@ def run_title(run: dict[str, Any]) -> str:
     return str(value_at(run, "model", "served_name", default="Unknown model"))
 
 
+def profile_name(stack: Any) -> str | None:
+    path = value_at(stack, "environment_file", "path", default=None)
+    return Path(str(path)).name if path else None
+
+
 def render_report(run: dict[str, Any], run_path: Path) -> str:
     quality = quality_summary(run)
     rows = performance_rows(run)
@@ -145,6 +150,7 @@ def render_report(run: dict[str, Any], run_path: Path) -> str:
         f"| Engine | `{markdown_cell(stack.get('engine'))}` |",
         f"| Compose file | `{markdown_cell(stack.get('compose_file'))}` |",
         f"| Compose SHA-256 | `{markdown_cell(stack.get('compose_sha256'))}` |",
+        f"| Benchmark profile | `{markdown_cell(stack.get('profile') or profile_name(stack))}` |",
         f"| Compose environment file | `{markdown_cell(value_at(stack, 'environment_file', 'path'))}` |",
         f"| Environment SHA-256 | `{markdown_cell(value_at(stack, 'environment_file', 'sha256'))}` |",
         f"| Container image | `{markdown_cell(value_at(stack, 'container', 'image'))}` |",
@@ -181,7 +187,7 @@ def render_report(run: dict[str, Any], run_path: Path) -> str:
     if gpus:
         lines.extend(
             [
-                "| GPU | Name | Power limit | Memory | PCIe |",
+                "| GPU | Name | Power limit | Memory | PCIe capability |",
                 "|---:|---|---:|---:|---|",
             ]
         )
@@ -192,8 +198,8 @@ def render_report(run: dict[str, Any], run_path: Path) -> str:
                     name=markdown_cell(gpu.get("name")),
                     power=markdown_cell(gpu.get("power.limit")),
                     memory=markdown_cell(gpu.get("memory.total")),
-                    pcie_gen=markdown_cell(gpu.get("pcie.link.gen.current")),
-                    pcie_width=markdown_cell(gpu.get("pcie.link.width.current")),
+                    pcie_gen=markdown_cell(gpu.get("pcie.link.gen.max")),
+                    pcie_width=markdown_cell(gpu.get("pcie.link.width.max")),
                 )
             )
     else:

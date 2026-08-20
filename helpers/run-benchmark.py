@@ -16,8 +16,8 @@ import os
 import re
 import secrets
 import shlex
-import signal
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -50,8 +50,11 @@ GPU_FIELDS = [
     "utilization.gpu",
     "utilization.memory",
     "memory.total",
-    "pcie.link.gen.current",
-    "pcie.link.width.current",
+    # Current PCIe link state is intentionally excluded: NVIDIA downshifts an
+    # idle link (often to Gen 1), so it is not representative of a benchmark.
+    # The maximum negotiated capability is stable and relevant to topology.
+    "pcie.link.gen.max",
+    "pcie.link.width.max",
 ]
 
 
@@ -700,6 +703,7 @@ def main() -> int:
                         if environment_file is not None
                         else None
                     ),
+                    "profile": environment_file.name if environment_file is not None else None,
                     "service": service,
                     "engine": args.backend or "auto-detected",
                     "container": container,
