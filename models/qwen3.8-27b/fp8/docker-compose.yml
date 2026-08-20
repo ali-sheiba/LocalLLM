@@ -3,7 +3,7 @@
 # Use environment overrides for benchmark sweeps. helpers/run-benchmark.py
 # records the resolved model mount, environment, and command for every run.
 services:
-  vllm-qwen38-27b:
+  vllm-qwen38-27b-fp8:
     image: ${VLLM_IMAGE:-vllm/vllm-openai:v0.27.1}
     container_name: ${CONTAINER_NAME:-vllm-qwen38-27b-fp8}
     restart: unless-stopped
