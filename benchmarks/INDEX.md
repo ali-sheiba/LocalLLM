@@ -4,6 +4,7 @@ Generated from immutable `benchmarks/runs/**/run.json` records. Scores are only 
 
 | Date | Model | Engine | Quality | Completion | Safety warnings | d0 c1 | d0 c2 / agent | d8K c1 | d8K c2 / agent | d32K c1 | d32K c2 / agent | Report |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| 2026-08-20T13:55:08.776666+00:00 | `Avuja/Qwen3.8-27B-int4-AutoRound` | `auto-detected` | 89 | — | 0 | 82.81 | 50.96 / 25.48 | 84.96 | 21.35 / 10.67 | 68.57 | 7.66 / 3.83 | [20260820T140014Z-avuja-qwen3-8-27b-int4-autoround-af994635](runs/2026/08/20260820T140014Z-avuja-qwen3-8-27b-int4-autoround-af994635/report.md) |
 | 2026-08-20T12:54:52.577793+00:00 | `Frozenlock/Qwen3.8-27B-int4-AutoRound` | `auto-detected` | 90 | — | 0 | 78.34 | 50.05 / 25.03 | 66.61 | 21.81 / 10.91 | 68.09 | 7.78 / 3.89 | [20260820T125958Z-frozenlock-qwen3-8-27b-int4-autoround-da2398d8](runs/2026/08/20260820T125958Z-frozenlock-qwen3-8-27b-int4-autoround-da2398d8/report.md) |
 | 2026-08-20T12:26:04.951115+00:00 | `Frozenlock/Qwen3.8-27B-int4-AutoRound` | `auto-detected` | 91 | — | 0 | 68.39 | 66.23 / 33.12 | 62.19 | 22.75 / 11.37 | 49.25 | 7.39 / 3.70 | [20260820T123115Z-frozenlock-qwen3-8-27b-int4-autoround-00f126a1](runs/2026/08/20260820T123115Z-frozenlock-qwen3-8-27b-int4-autoround-00f126a1/report.md) |
 | 2026-08-20T11:47:15.334749+00:00 | `Qwen/Qwen3.8-27B-FP8` | `auto-detected` | 87 | — | 0 | 60.86 | 77.11 / 38.56 | 39.59 | 21.66 / 10.83 | 20.85 | 6.43 / 3.21 | [20260820T115256Z-qwen-qwen3-8-27b-fp8-0041b65d](runs/2026/08/20260820T115256Z-qwen-qwen3-8-27b-fp8-0041b65d/report.md) |
