@@ -45,20 +45,26 @@ template, and conservative two-agent baseline:
 | `mkrww.env` | [`MKRWW/Qwen3.8-27B-int4-AutoRound`](https://huggingface.co/MKRWW/Qwen3.8-27B-int4-AutoRound) | W4A16, group-128 INT4 reference |
 | `avuja.env` | [`Avuja/Qwen3.8-27B-int4-AutoRound`](https://huggingface.co/Avuja/Qwen3.8-27B-int4-AutoRound) | W4A16 candidate with a preserved BF16 MTP head |
 | `goldhub.env` | [`goldhub/Qwen3.8-27B-INT4-W4A16-AutoRound`](https://huggingface.co/goldhub/Qwen3.8-27B-INT4-W4A16-AutoRound) | W4A16, group-32 candidate with more preserved BF16 layers |
-| `frozenlock.env` | [`Frozenlock/Qwen3.8-27B-int4-AutoRound`](https://huggingface.co/Frozenlock/Qwen3.8-27B-int4-AutoRound) | W4A16, group-128 candidate with a quantized MTP head |
+| `frozenlock.env` | [`Frozenlock/Qwen3.8-27B-int4-AutoRound`](https://huggingface.co/Frozenlock/Qwen3.8-27B-int4-AutoRound) | W4A16, group-128 stable two-agent control; MTP is disabled |
 | `minachist.env` | [`Minachist/Qwen3.8-27B-INT8-AutoRound`](https://huggingface.co/Minachist/Qwen3.8-27B-INT8-AutoRound) | W8A16 quality/capacity reference for the installed `main` branch |
 
-All profiles start with native model templates, non-thinking tool use, dynamic
-INT8 KV, prefix caching off, and `MAX_NUM_SEQS=2`. This is a stability-first
-c1/c2 baseline: first establish long-context tool-call behavior, then isolate
-MTP, prefix cache, a custom template, or another performance setting in a copied
-profile.
+All author control profiles, including `frozenlock.env`, start with native model
+templates, non-thinking tool use, dynamic INT8 KV, prefix caching off, and
+`MAX_NUM_SEQS=2`. This is a stability-first c1/c2 baseline: first establish
+long-context tool-call behavior, then isolate MTP, prefix cache, a custom
+template, or another performance setting in a copied profile.
+
+`profiles/frozenlock-01-mtp-4-fp8-prefix.env` is the separate, source-aligned
+single-stream throughput experiment: FP8 E4M3 KV, prefix caching, MTP n=4, and
+`MAX_NUM_SEQS=1`.
 
 The MTP/W4A8 configuration in
 [Club-3090](https://github.com/noonghunna/club-3090/blob/master/models/qwen3.8-27b/vllm/compose/dual/autoround-int4/mtp.yml)
-is useful evidence but is not this baseline. It uses runtime patches and documents
-an OOM with `MTP n=4` plus two sequences on dual 3090s. Do not treat its
-single-stream fast path as a safe two-agent configuration.
+is the source for Frozenlock's MTP experiment depth and single-stream memory
+limits. Its W4A8 activation path uses additional runtime patches that this
+portable experiment does not mount. It also documents an OOM with `MTP n=4` plus
+two sequences on dual 3090s; do not treat the fast path as a safe two-agent
+configuration.
 
 ### Run a named profile
 

@@ -14,7 +14,7 @@ changing its assignments.
 | `mkrww.env` | 88 | 68.64 / 62.37 / 49.34 | 38.49 / 14.61 / 4.34 | structured reasoning and safety quality |
 | `goldhub.env` | 91 | 50.11 / 46.64 / 38.90 | 31.23 / 13.43 / 4.48 | recover decode speed while preserving quality |
 | `minachist.env` | 88 | 46.89 / 43.81 / 36.87 | 29.87 / 13.20 / 4.47 | tool selection/context quality and INT8 speed |
-| `frozenlock.env` | pending | pending | pending | W4A16 control with a quantized MTP head; benchmark native-template stability first |
+| `frozenlock.env` | pending | pending | pending | stable W4A16 two-agent control; MTP and prefix cache disabled |
 
 All controls used the same benchmark protocol, vLLM image, dual 3090 hardware,
 and 350W benchmark power cap. They remain model-specific comparisons because
@@ -32,7 +32,8 @@ perfect Code Patterns, so do not trade it away for a small gain elsewhere.
 | `mkrww-03-flashinfer-sampler.env` | FlashInfer sampler on | Can sampled decode improve without quality loss? |
 | `mkrww-04-tool-parser-xml.env` | `qwen3_xml` parser | Does native XML improve Structured Reasoning? |
 | `mkrww-05-froggeric-template.env` | froggeric template | Does template formatting improve tools/safety? |
-| `mkrww-06-thinking-low.env` | low-effort thinking on | Is the quality cost worth the throughput loss? |
+| `avuja-08-thinking-low.env` | low-effort thinking on | Is the quality cost worth the throughput loss? |
+| `avuja-09-mtp-3-fp8-prefix.env` | MTP n=3 + FP8 KV + prefix cache, one sequence | Does Avuja's preserved BF16 MTP head remain stable past 15K generated tokens? |
 
 ## Goldhub experiments
 
@@ -48,6 +49,7 @@ quality score as the primary gate when testing its author-recommended cache path
 | `goldhub-05-tool-parser-xml.env` | `qwen3_xml` parser | Does it improve Multi-Step Chains and Planning? |
 | `goldhub-06-thinking-low.env` | low-effort thinking on | Does it improve planning enough to justify latency? |
 | `goldhub-07-froggeric-template.env` | mounted froggeric template | Does it differ from Goldhub's native froggeric-v22-derived template? |
+| `goldhub-08-mtp-3-fp8-prefix.env` | author-recommended MTP n=3 + FP8 KV + prefix cache | Does the documented 128K/two-agent MTP configuration remain stable and improve throughput? |
 
 ## Minachist experiments
 
@@ -72,11 +74,16 @@ native template is already froggeric-v22-derived, so that arm specifically tests
 whether the bundled and repository-mounted versions diverge. Compare each only
 with its own native-template control.
 
-MTP is intentionally not in this profile set. This includes Frozenlock, whose
-checkpoint quantizes its MTP head. The existing unpatched Compose stack does not
-expose a safe MTP toggle, and the available dual-3090 MTP evidence uses Club-3090
-runtime patches and reports a two-sequence OOM risk. Add it later as a dedicated
-compose experiment after the stable profile matrix is complete.
+MTP remains intentionally absent from the two-agent control matrix. The separate
+`frozenlock-01-mtp-4-fp8-prefix.env`, `avuja-09-mtp-3-fp8-prefix.env`, and
+`goldhub-08-mtp-3-fp8-prefix.env` profiles test source-specific MTP paths without
+changing their controls. Avuja's test is a guarded one-stream smoke experiment:
+community evidence reports its draft acceptance collapsing after roughly 15K
+generated tokens. Goldhub's profile follows the author's documented 128K,
+two-agent MTP n=3 configuration. The Club-3090 W4A8 activation path requires
+additional runtime patches and is not part of these portable W4A16 experiments.
+Benchmark MTP and concurrency separately before treating any as an agent-serving
+baseline.
 
 ## Run and record
 
