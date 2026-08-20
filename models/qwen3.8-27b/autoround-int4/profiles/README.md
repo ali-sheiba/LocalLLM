@@ -32,8 +32,21 @@ perfect Code Patterns, so do not trade it away for a small gain elsewhere.
 | `mkrww-03-flashinfer-sampler.env` | FlashInfer sampler on | Can sampled decode improve without quality loss? |
 | `mkrww-04-tool-parser-xml.env` | `qwen3_xml` parser | Does native XML improve Structured Reasoning? |
 | `mkrww-05-froggeric-template.env` | froggeric template | Does template formatting improve tools/safety? |
-| `avuja-08-thinking-low.env` | low-effort thinking on | Is the quality cost worth the throughput loss? |
+| `avuja-08-tool-sampling-temp-0.6.env` | server-default temperature `0.6` | Does lower sampling reduce tool-call variance? (The quality evaluator explicitly uses temperature `0.0`.) |
 | `avuja-09-mtp-3-fp8-prefix.env` | MTP n=3 + FP8 KV + prefix cache, one sequence | Does Avuja's preserved BF16 MTP head remain stable past 15K generated tokens? |
+
+## Avuja synthesis experiment
+
+The nine-profile comparison is documented in
+`benchmarks/comparisons/avuja-profile-sweep-2026-08-20.md`. P04's recorded
+runtime (FlashInfer + FP8 KV) is the strongest two-agent performance base; P07's
+Froggeric result is the only plausible semantic quality lead, but needs repeated
+quality trials. P09 remains a one-stream MTP smoke profile after a tool-call loop
+was observed following context compression.
+
+| Profile | Combined evidence | Promotion question |
+|---|---|---|
+| `avuja-10-fp8-kv-froggeric.env` | Explicit FlashInfer + FP8 KV, Froggeric template, two sequences, async on, MTP/prefix off | Can Avuja retain P04-like two-agent performance while reproducing P07's 91 quality score with zero warnings and passing a two-session soak? |
 
 ## Goldhub experiments
 

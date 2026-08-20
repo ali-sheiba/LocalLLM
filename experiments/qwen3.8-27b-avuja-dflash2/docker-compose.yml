@@ -1,0 +1,96 @@
+# Experimental vLLM DFlash2 overlay for Avuja Qwen3.8-27B AutoRound INT4.
+# This stack is isolated from the canonical Avuja Compose file for easy rollback.
+services:
+  vllm-qwen38-27b-avuja-dflash2:
+    image: ${VLLM_IMAGE:-vllm/vllm-openai:v0.27.1}
+    container_name: ${CONTAINER_NAME:-vllm-qwen38-27b-avuja-dflash2}
+    restart: ${RESTART_POLICY:-no}
+    ports:
+      - "${PORT:-8080}:8000"
+    volumes:
+      - ${MODEL_HOST_PATH:-/home/app/models/Avuja/Qwen3.8-27B-int4-AutoRound}:/models/model:ro
+      - ${DRAFTER_HOST_PATH:-/home/app/models/incoai/Qwen3.8-27B-DFlash2}:/models/drafter:ro
+      - ${CUSTOM_CHAT_TEMPLATE_HOST_PATH:-/home/app/models/froggeric/Qwen-Fixed-Chat-Templates/chat_template.jinja}:/etc/qwen-custom-chat-template.jinja:ro
+      - ./vendor/vllm-dflash2-backport:/etc/club3090/dflash2:ro
+      - ./vendor/vllm-pr48375-mamba-drop-eagle-block:/etc/club3090/pr48375:ro
+      - ./local-patches:/etc/localllm/dflash2:ro
+      - /home/app/cache/vllm/torch_compile:/root/.cache/vllm/torch_compile_cache
+      - /home/app/cache/vllm/triton:/root/.triton/cache
+    environment:
+      CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-0,1}
+      NVIDIA_VISIBLE_DEVICES: all
+      NCCL_P2P_DISABLE: "${NCCL_P2P_DISABLE:-1}"
+      NCCL_CUMEM_ENABLE: "${NCCL_CUMEM_ENABLE:-0}"
+      OMP_NUM_THREADS: "${OMP_NUM_THREADS:-1}"
+      PYTORCH_CUDA_ALLOC_CONF: ${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True,max_split_size_mb:512}
+      VLLM_NO_USAGE_STATS: "1"
+      VLLM_SKIP_P2P_CHECK: "${VLLM_SKIP_P2P_CHECK:-1}"
+      VLLM_WORKER_MULTIPROC_METHOD: ${VLLM_WORKER_MULTIPROC_METHOD:-spawn}
+      VLLM_USE_V2_MODEL_RUNNER: "${VLLM_USE_V2_MODEL_RUNNER:-1}"
+      VLLM_USE_FLASHINFER_SAMPLER: "${VLLM_USE_FLASHINFER_SAMPLER:-1}"
+      VLLM_DFLASH2_DRAFT_TOPK_TOPP: "${VLLM_DFLASH2_DRAFT_TOPK_TOPP:-1}"
+      VLLM_DFLASH2_TORCH_TOPK: "${VLLM_DFLASH2_TORCH_TOPK:-0}"
+      QUANTIZATION: "${QUANTIZATION:-auto_round}"
+      DRAFT_SPEC_N: "${DRAFT_SPEC_N:-7}"
+    shm_size: "${SHM_SIZE:-16gb}"
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    entrypoint:
+      - bash
+      - -ec
+      - |
+        bash /etc/club3090/pr48375/install.sh
+        bash /etc/club3090/dflash2/install.sh
+        python3 /etc/localllm/dflash2/patch_candidate_selector_namespace.py
+
+        case "$${DRAFT_SPEC_N}" in
+          ""|*[!0-9]*)
+            echo "DRAFT_SPEC_N must be a non-negative integer." >&2
+            exit 2
+            ;;
+        esac
+
+        extra_args=()
+        if [ -n "$${QUANTIZATION:-}" ]; then
+          extra_args+=(--quantization "$${QUANTIZATION}")
+        fi
+        if [ "$${DRAFT_SPEC_N}" -gt 0 ]; then
+          extra_args+=(--speculative-config "{\"method\":\"dflash\",\"model\":\"/models/drafter\",\"num_speculative_tokens\":$${DRAFT_SPEC_N}}")
+        fi
+        exec vllm serve "$${@}" "$${extra_args[@]}"
+      - --
+    command:
+      - --model=/models/model
+      - --served-model-name=${SERVED_MODEL_NAME:-qwen3.8-27b}
+      - --trust-remote-code
+      - --dtype=${DTYPE:-bfloat16}
+      - --max-model-len=${MAX_MODEL_LEN:-131072}
+      - --max-num-seqs=${MAX_NUM_SEQS:-2}
+      - --gpu-memory-utilization=${GPU_MEMORY_UTILIZATION:-0.80}
+      - --kv-cache-dtype=${KV_CACHE_DTYPE:-fp8_e4m3}
+      - "${PREFIX_CACHE_ARG:---enable-prefix-caching}"
+      - --mamba-cache-mode=${MAMBA_CACHE_MODE:-align}
+      - "${CHUNKED_PREFILL_ARG:---enable-chunked-prefill}"
+      - --max-num-batched-tokens=${MAX_NUM_BATCHED_TOKENS:-8192}
+      - "${ASYNC_SCHEDULING_ARG:---no-async-scheduling}"
+      - --tensor-parallel-size=${TENSOR_PARALLEL_SIZE:-2}
+      - --pipeline-parallel-size=${PIPELINE_PARALLEL_SIZE:-1}
+      - "${CUSTOM_ALL_REDUCE_ARG:---disable-custom-all-reduce}"
+      - "${FLASHINFER_AUTOTUNE_ARG:---enable-flashinfer-autotune}"
+      - --enable-auto-tool-choice
+      - --tool-call-parser=${TOOL_PARSER:-qwen3_coder}
+      - --reasoning-parser=${REASONING_PARSER:-qwen3}
+      - --chat-template=${CHAT_TEMPLATE:-/etc/qwen-custom-chat-template.jinja}
+      - '--default-chat-template-kwargs={"enable_thinking": ${ENABLE_THINKING:-false}, "reasoning_effort": "${REASONING_EFFORT:-low}"}'
+      - '--limit-mm-per-prompt={"image":${MAX_IMAGES_PER_PROMPT:-2},"video":0}'
+      - --generation-config=${GENERATION_CONFIG:-vllm}
+      - '--override-generation-config={"temperature":${TEMPERATURE:-0.7},"top_p":${TOP_P:-0.80},"top_k":${TOP_K:-20},"min_p":${MIN_P:-0.0},"presence_penalty":${PRESENCE_PENALTY:-1.5},"repetition_penalty":${REPETITION_PENALTY:-1.0}}'
+      - --host=0.0.0.0
+      - --port=8000
