@@ -14,6 +14,7 @@ changing its assignments.
 | `mkrww.env` | 88 | 68.64 / 62.37 / 49.34 | 38.49 / 14.61 / 4.34 | structured reasoning and safety quality |
 | `goldhub.env` | 91 | 50.11 / 46.64 / 38.90 | 31.23 / 13.43 / 4.48 | recover decode speed while preserving quality |
 | `minachist.env` | 88 | 46.89 / 43.81 / 36.87 | 29.87 / 13.20 / 4.47 | tool selection/context quality and INT8 speed |
+| `frozenlock.env` | pending | pending | pending | W4A16 control with a quantized MTP head; benchmark native-template stability first |
 
 All controls used the same benchmark protocol, vLLM image, dual 3090 hardware,
 and 350W benchmark power cap. They remain model-specific comparisons because
@@ -71,10 +72,11 @@ native template is already froggeric-v22-derived, so that arm specifically tests
 whether the bundled and repository-mounted versions diverge. Compare each only
 with its own native-template control.
 
-MTP is intentionally not in this profile set. The existing unpatched Compose
-stack does not expose a safe MTP toggle, and the available dual-3090 MTP evidence
-uses Club-3090 patches and reports a two-sequence OOM risk. Add it later as a
-dedicated compose experiment after the stable profile matrix is complete.
+MTP is intentionally not in this profile set. This includes Frozenlock, whose
+checkpoint quantizes its MTP head. The existing unpatched Compose stack does not
+expose a safe MTP toggle, and the available dual-3090 MTP evidence uses Club-3090
+runtime patches and reports a two-sequence OOM risk. Add it later as a dedicated
+compose experiment after the stable profile matrix is complete.
 
 ## Run and record
 

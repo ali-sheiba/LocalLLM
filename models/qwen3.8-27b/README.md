@@ -45,6 +45,7 @@ template, and conservative two-agent baseline:
 | `mkrww.env` | [`MKRWW/Qwen3.8-27B-int4-AutoRound`](https://huggingface.co/MKRWW/Qwen3.8-27B-int4-AutoRound) | W4A16, group-128 INT4 reference |
 | `avuja.env` | [`Avuja/Qwen3.8-27B-int4-AutoRound`](https://huggingface.co/Avuja/Qwen3.8-27B-int4-AutoRound) | W4A16 candidate with a preserved BF16 MTP head |
 | `goldhub.env` | [`goldhub/Qwen3.8-27B-INT4-W4A16-AutoRound`](https://huggingface.co/goldhub/Qwen3.8-27B-INT4-W4A16-AutoRound) | W4A16, group-32 candidate with more preserved BF16 layers |
+| `frozenlock.env` | [`Frozenlock/Qwen3.8-27B-int4-AutoRound`](https://huggingface.co/Frozenlock/Qwen3.8-27B-int4-AutoRound) | W4A16, group-128 candidate with a quantized MTP head |
 | `minachist.env` | [`Minachist/Qwen3.8-27B-INT8-AutoRound`](https://huggingface.co/Minachist/Qwen3.8-27B-INT8-AutoRound) | W8A16 quality/capacity reference for the installed `main` branch |
 
 All profiles start with native model templates, non-thinking tool use, dynamic
