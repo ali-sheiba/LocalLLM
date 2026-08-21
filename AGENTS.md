@@ -1,220 +1,88 @@
-# Docker — Local LLM Inference for Agentic Coding
+# LocalLLM contributor guide
 
-**Goal**: Find the best local LLM configuration for **agentic coding and workflows**. Each stack targets **2+ parallel sessions** with the **maximum context window** that fits on dual RTX 3090 (24 GB each, PCIe, no NVLink).
+## Purpose
 
-This project stores and experiments with different model configurations across **vLLM** and **llama.cpp** backends. Every stack is a hypothesis — we tune, benchmark, and iterate.
+LocalLLM is a personal set of reproducible local-LLM serving and benchmark experiments for agentic coding. It targets a Proxmox LXC with a Threadripper Pro 3955WX, 128 GB ECC RAM, and two PCIe RTX 3090 GPUs (24 GB each, no NVLink). Configurations are hypotheses to measure, not universal recommendations.
 
-## Hardware & Setup
+The project is inspired by [club-3090](https://github.com/noonghunna/club-3090) and community research. Preserve provenance when porting or adapting an upstream configuration.
 
-| Item | Detail |
-|---|---|
-| GPUs | 2× RTX 3090 (24 GB each), PCIe-only (no NVLink) |
-| Tensor parallel | TP=2 for vLLM stacks; layer-split via `-ts` or `-np` for llama.cpp |
-| Model storage | `/models/` (host), mounted read-only into containers |
-| Cache dirs | `/home/app/cache/vllm/torch_compile`, `/home/app/cache/vllm/triton` |
-| Chat templates | `/models/chat_template.jinja`, `/models/froggeric/...` |
+## Repository layout
 
-**Only one stack should run at a time** — they share port `8080` and the two GPUs. Stop the current stack (`docker compose down`) before starting another.
-
-## Project Structure
-
-```
-docker/
+```text
+LocalLLM/
+├── README.md
 ├── AGENTS.md
-├── .gitignore
-│
-├── models/                            # All runnable stacks, organized by model family
-│   │
+├── models/                         # Canonical runnable stacks
 │   ├── laguna-xs/
-│   │   └── default.yml                # llama.cpp — Laguna XS 2.1 (GGUF)
-│   │
 │   ├── llama-embed/
-│   │   └── default.yml                # llama.cpp CPU — Nomic embed (3 replicas)
-│   │
+│   ├── muse-glimmer-30b/
 │   ├── ornith-1.0-35b/
-│   │   ├── llama.yml                  # ik-llama — Ornith 1.0 35B (Q8, agentic-coding RL)
-│   │   └── vllm.yml                   # vLLM — Ornith 1.0 35B (FP8)
-│   │
 │   ├── qwen3.6-27b/
-│   │   ├── fp8/default.yml            # vLLM — FP8 (official Qwen quant)
-│   │   ├── awq-int4/default.yml       # vLLM — AWQ-INT4 (cyankiwi)
-│   │   ├── autoround-int4/default.yml # vLLM — AutoRound-INT4 (Lorbus)
-│   │   └── mtp/default.yml            # llama.cpp — MTP speculative (Q4_K_M)
-│   │
 │   ├── qwen3.6-35b/
-│   │   ├── fp8/default.yml            # vLLM — MoE + vision (FP8)
-│   │   └── uncensored/default.yml     # llama.cpp — Uncensored (Q6_K_P)
-│   │
-│   └── qwopus3.6-27b/
-│       ├── coder/default.yml          # llama.cpp — Coder fine-tune (Q8)
-│       └── coder-mtp/default.yml      # llama.cpp — Coder + MTP speculative
-│
-├── experiments/                       # Experimental / A-B variants
-│   ├── README.md                      # Naming convention and how to run
-│   └── <model-name>/
-│       └── <description>.yml          # e.g. "v2-nccl-tuning.yml"
-│
-├── benchmarks/                        # Benchmark results & scoring
-│   ├── README.md                      # How we benchmark and scoring rubric
-│   ├── scoring.md                     # Current best scores per category
-│   └── results/                       # Per-stack benchmark logs
-│
-└── helpers/                           # Operational scripts
-    ├── switch-stack.sh                # Stop current, start new in one shot
-    └── check-gpu.sh                   # Quick nvidia-smi wrapper
-
-### Naming conventions
-
-| Pattern | Meaning |
-|---|---|
-| `models/<model>/<variant>/default.yml` | Canonical config for a stack |
-| `models/<model>/<model>.yml` | Single-variant stacks use the model name (e.g. `llama.yml`) |
-| `experiments/<model-name>/<name>.yml` | Experimental variant of an existing stack |
-| `.env` | Private env vars; placed alongside the compose file, never committed |
-| `.env.example` | Public template with no secrets |
+│   └── qwen3.8-27b/
+├── experiments/                    # Isolated changes under evaluation
+├── benchmarks/                     # Immutable run evidence and comparisons
+└── helpers/                        # Operational and benchmark scripts
 ```
 
-### Adding a new variant
+## Runtime conventions
 
-1. Create a sub-directory under `models/<model>/`
-2. Add a `default.yml` with the base configuration
-3. Add a `.env.example` with documented env vars
-4. If tuning, copy from `default.yml` to `experiments/<model-name>/` and iterate
+- Run only **one GPU stack at a time**. Most GPU stacks consume both cards and bind host port `8080`; the CPU embedding service uses `8082`.
+- Compose bind mounts must use `${MODEL_ROOT:-${HOME}/models}` for all host-side model and template paths. Never add `/home/app/models` or a machine-specific model root.
+- vLLM cache mounts use `${VLLM_CACHE_ROOT:-${HOME}/.cache/LocalLLM/vllm}`. Do not introduce machine-specific cache paths.
+- Keep model files in a Hugging Face-style layout: `$MODEL_ROOT/<author-or-org>/<model-name>/`.
+- Mount weights and templates read-only unless a stack has a documented reason not to.
+- Explicit container names use `local-llm-<model>-<variant>-<engine>` and must be globally unique. Do not reuse a name from a canonical stack in an experiment.
+- Check the resolved file with `docker compose -f <compose-file> config` before launching a changed stack.
 
-### Adding a new model
+## Current stack inventory
 
-1. Create a new top-level directory under `models/` using the model name
-2. Add variants as sub-directories, following the existing patterns
-
-## Stack Quick Reference
-
-| Stack | Engine | Model | Quant | Context | Notes |
-|---|---|---|---|---|---|
-| `laguna-xs/` | llama.cpp | Laguna XS 2.1 | Q4_K_M | 524K | GGUF, layer-split 2× 3090 |
-| `llama-embed/` | llama.cpp (CPU) | Nomic Embed v1.5 | Q8_0 | 8K | Embedding service, 3 replicas |
-| `ornith-1.0-35b/llama.yml` | ik-llama | Ornith 1.0 35B | Q8_0 | 262K | Agentic-coding RL, MoE |
-| `ornith-1.0-35b/vllm.yml` | vLLM | Ornith 1.0 35B | FP8 | 131K | vLLM variant of Ornith |
-| `qwen3.6-27b/fp8/` | vLLM | Qwen3.6-27B | FP8 | 262K | Official Qwen quant, MTP k=3 |
-| `qwen3.6-27b/awq-int4/` | vLLM | Qwen3.6-27B | AWQ-INT4 | 262K | cyankiwi quant |
-| `qwen3.6-27b/autoround-int4/` | vLLM | Qwen3.6-27B | AutoRound-INT4 | 262K | Lorbus quant |
-| `qwen3.6-27b/mtp/` | llama.cpp | Qwen3.6-27B-MTP | Q4_K_M | 32K | Speculative MTP decoding |
-| `qwen3.6-35b/fp8/` | vLLM | Qwen3.6-35B-A3B | FP8 | 131K | MoE hybrid (Mamba + full-attn), multimodal |
-| `qwen3.6-35b/uncensored/` | llama.cpp | Qwen3.6-35B-A3B-Uncensored | Q6_K_P | 524K | HauhauCS aggressive |
-| `qwopus3.6-27b/coder/` | llama.cpp | Qwopus3.6-27B-Coder | Q8_0 | 262K | Coder fine-tune |
-| `qwopus3.6-27b/coder-mtp/` | llama.cpp | Qwopus3.6-27B-Coder-MTP | Q8_0 | 262K | Coder + speculative MTP |
-
-## Common Patterns
-
-### Starting a stack
-
-```bash
-cd docker/models/<model>/<variant>
-docker compose up -d
-```
-
-For stacks with a named compose file (not `default.yml`):
-
-```bash
-# ik-llama Ornith
-cd docker/models/ornith-1.0-35b
-MODEL_DIR=/models/deepreinforce-ai/Ornith-1.0-35B-GGUF PORT=8071 \
-  docker compose -f llama.yml up -d
-```
-
-### Stopping a stack
-
-```bash
-cd docker/models/<model>/<variant>
-docker compose down
-```
-
-### Switching stacks
-
-```bash
-# Use the helper to stop current and start new in one shot
-./docker/helpers/switch-stack.sh <model>/<variant>
-```
-
-### Running an experiment
-
-```bash
-# Run an experimental variant (A-B test)
-cd docker/experiments/<model-name>
-docker compose -f <description>.yml up -d
-```
-
-### Common environment overrides
-
-Most stacks support these overrides via `.env` or inline:
-
-| Variable | Default | Description |
+| Path | Engine | Notes |
 |---|---|---|
-| `CTX_SIZE` | varies | Context window size |
-| `BATCH_SIZE` | 4096 | Prefill batch size |
-| `UBATCH_SIZE` | 512 | UV batch size |
-| `KV_TYPE` | q4_0 / q8_0 | KV cache quantization |
-| `NP` | 1-2 | Number of batch sequences |
-| `TEMP` / `TEMPERATURE` | 0.6 | Sampling temperature |
-| `TOP_P` | 0.95 | Nucleus sampling threshold |
-| `TOP_K` | 20 | Top-k sampling |
-| `REASONING` | off | Enable reasoning mode |
-| `REASONING_FORMAT` | deepseek | Reasoning output format |
+| `models/laguna-xs/default.yml` | llama.cpp | Laguna XS 2.1 GGUF |
+| `models/llama-embed/default.yml` | llama.cpp CPU | Nomic embedding service |
+| `models/muse-glimmer-30b/docker-compose.yml` | llama.cpp | Muse Glimmer 30B GGUF |
+| `models/ornith-1.0-35b/llama.yml` | ik-llama | Ornith 1.0 35B GGUF |
+| `models/ornith-1.0-35b/vllm.yml` | vLLM | Ornith 1.0 35B FP8 |
+| `models/qwen3.6-27b/*` | vLLM / llama.cpp | FP8, AWQ, AutoRound, MTP, and Fable Fusion variants |
+| `models/qwen3.6-35b/*` | vLLM / llama.cpp | Qwen 3.6 35B A3B variants |
+| `models/qwen3.8-27b/*` | vLLM / llama.cpp | FP8, AutoRound profile sweeps, and Unsloth GGUF |
 
-### vLLM-specific
+Compose files may be named `default.yml`, `docker-compose.yml`, or a model-specific file such as `llama.yml`; use the actual filename.
 
-| Variable | Purpose |
-|---|---|
-| `CUDA_VISIBLE_DEVICES` | Restrict which GPUs the stack uses |
-| `PREFIX_CACHE_ARG` | Toggle prefix caching (off by default on AWQ to avoid MTP + prefix-cache corruption) |
+## Adding or changing stacks
 
-## Shared Constraints
+1. Add a model family under `models/<model>/`; use a variant directory where more than one configuration exists.
+2. Use `default.yml` for a canonical variant when practical. Provide `.env.example` for stacks with meaningful user-tunable values.
+3. Put a tuning hypothesis under `experiments/<model>-<variant>/` rather than overwriting a canonical configuration.
+4. Use a distinct explicit container name for every Compose configuration.
+5. Preserve source URLs, image tags/digests, model identifiers, and any local patch provenance in comments or adjacent documentation.
+6. Do not add weights, generated caches, `.env` files, credentials, or private host/network details to Git.
+7. Validate Compose syntax and mount interpolation with `MODEL_ROOT=/tmp/models docker compose -f <file> config`.
 
-- **Port 8080**: All GPU stacks bind to `8080:8000` (vLLM) or `8080:8080` (llama.cpp). Only one can run at a time.
-- **GPU conflict**: Running two GPU stacks simultaneously will OOM. Always `docker compose down` the current one first.
-- **35B A3B on vLLM** requires a vLLM build with `qwen3_5_moe` support — the pinned v0.22.0 image used for 27B may not support it.
-- **Chat templates**: The `froggeric` chat template is mounted from `/models/froggeric/Qwen-Fixed-Chat-Templates/chat_template.jinja` on vLLM stacks. The 35B A3B uses its own built-in template.
-- **Speculative decoding (MTP)**: Enabled on most stacks via `--spec-type draft-mtp` (llama.cpp) or `speculative-config` (vLLM). Note: prefix-caching is disabled on AWQ-INT4 because MTP × prefix-cache corrupts recurrent-state KV.
+## Benchmarking
 
-## Models Directory
+- `helpers/run-benchmark.py` writes immutable `report.md` and `run.json` artifacts under `benchmarks/runs/` and rebuilds the index.
+- Install `uv` before running benchmark helpers. See `benchmarks/README.md` for the protocol.
+- Compare runs only when model source/quantization, engine/image, effective command/environment, GPU topology, power policy, and measurement protocol are equivalent.
+- At concurrency two, report per-agent responsiveness as well as aggregate throughput.
+- Historical benchmark records must not be edited merely to reflect a newer local path or Compose file.
 
-Models are stored under `/models/` on the host, following **HuggingFace-style** `author/model-name` paths. This convention mirrors HF repository URLs (`huggingface.co/author/model-name`) for easy traceability.
+## Useful commands
 
-**Convention**: `<hf-username-or-org>/<model-name>`
+```sh
+# Inspect GPU state
+./helpers/check-gpu.sh
 
-```
-/models/
-├── Qwen/Qwen3.6-27B-FP8
-├── Qwen/Qwen3.6-35B-A3B-FP8
-├── cyankiwi/Qwen3.6-27B-AWQ-INT4
-├── Lorbus/Qwen3.6-27B-int4-AutoRound
-├── unsloth/Qwen3.6-27B-MTP-GGUF
-├── HauhauCS/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive
-├── deepreinforce-ai/Ornith-1.0-35B-GGUF
-├── deepreinforce-ai/Ornith-1.0-35B-FP8
-├── Jackrong/Qwopus3.6-27B-Coder-GGUF
-├── Jackrong/Qwopus3.6-27B-Coder-MTP-GGUF
-├── poolside/Laguna-XS-2.1-GGUF
-├── nomic-ai/nomic-embed-text-v1.5-GGUF
-└── froggeric/Qwen-Fixed-Chat-Templates/
-```
+# Render a stack before launch
+MODEL_ROOT="$HOME/models" docker compose -f models/qwen3.8-27b/fp8/docker-compose.yml config
 
-**When adding a new model**: Create its directory as `/models/<hf-author>/<model-name>/` to maintain consistency with the source repository.
+# Start a stack
+MODEL_ROOT="$HOME/models" docker compose -f models/qwen3.8-27b/fp8/docker-compose.yml up -d
 
-## Useful Commands
+# Stop it
+docker compose -f models/qwen3.8-27b/fp8/docker-compose.yml down
 
-```bash
-# Check running containers
-docker ps --format "table {{.Names}}	{{.Status}}	{{.Ports}}"
-
-# View logs of a running stack
-docker compose -f docker/models/<model>/<variant>/default.yml logs -f
-
-# Check GPU memory
-./docker/helpers/check-gpu.sh
-
-# Switch from current stack to another
-./docker/helpers/switch-stack.sh qwen3.6-27b/fp8
-
-# Clean up unused images
-docker image prune -a
+# Switch canonical model stacks
+./helpers/switch-stack.sh qwen3.8-27b/fp8
 ```

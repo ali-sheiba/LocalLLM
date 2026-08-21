@@ -1,26 +1,42 @@
 # Experiments
 
-Experimental configurations that deviate from the canonical `default.yml` in `stacks/`.
+This directory contains isolated serving changes under evaluation. Canonical runnable configurations remain under [`models/`](../models/); do not overwrite them with an unverified tuning attempt.
 
-## Naming Convention
+## Layout and naming
 
+```text
+experiments/<model>-<variant>/<descriptive-name>.yml
 ```
-experiments/<stack-name>/<name>.yml
+
+Use a descriptive name for the hypothesis, such as `dflash2`, `gpu-mem-0.90`, or `no-prefix-cache`. Keep source patches, a short provenance note, and any experiment-specific profiles adjacent to the Compose file.
+
+## Run an experiment
+
+From the repository root, render it first and then launch it:
+
+```sh
+MODEL_ROOT="$HOME/models" docker compose \
+  -f experiments/<model>-<variant>/<descriptive-name>.yml config
+
+MODEL_ROOT="$HOME/models" docker compose \
+  -f experiments/<model>-<variant>/<descriptive-name>.yml up -d
 ```
 
-- `<stack-name>` matches the variant name under `stacks/<model>/<variant>/`
-- `<name>` describes the change — e.g. `v2-gpu-mem-0.90.yml`, `no-prefix-cache.yml`
+When an experiment provides a committed profile, pass it explicitly:
 
-## How to Run
-
-```bash
-cd docker/experiments/<stack-name>
-docker compose -f <name>.yml up -d
+```sh
+MODEL_ROOT="$HOME/models" docker compose \
+  --env-file experiments/<model>-<variant>/profiles/<profile>.env \
+  -f experiments/<model>-<variant>/<descriptive-name>.yml up -d
 ```
+
+Stop the same configuration with `docker compose ... down` before launching another GPU stack. Most experiments use both RTX 3090s and host port `8080`.
 
 ## Workflow
 
-1. Copy `stacks/<model>/<variant>/default.yml` as a starting point
-2. Make your change(s)
-3. Name the file descriptively
-4. Add a comment at the top documenting what changed and why
+1. Copy the closest canonical Compose file into a clearly named experiment directory.
+2. Change one hypothesis at a time where possible.
+3. Use `${MODEL_ROOT:-${HOME}/models}` for all model/template mounts and the repository container-name convention.
+4. Record upstream source, patch origin, image version, expected benefit, and known risk.
+5. Validate with `docker compose ... config`.
+6. Benchmark the result and commit the generated immutable benchmark artifacts when publishing a conclusion.

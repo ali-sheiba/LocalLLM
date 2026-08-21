@@ -5,17 +5,17 @@
 services:
   vllm-qwen38-27b-fp8:
     image: ${VLLM_IMAGE:-vllm/vllm-openai:v0.27.1}
-    container_name: ${CONTAINER_NAME:-vllm-qwen38-27b-fp8}
+    container_name: ${CONTAINER_NAME:-local-llm-qwen3.8-27b-fp8-vllm}
     restart: unless-stopped
     ports:
       - "${PORT:-8080}:8000"
     volumes:
       # Keep this destination stable: helpers/run-benchmark.py identifies model
       # provenance from mounts below /models.
-      - ${MODEL_HOST_PATH:-/home/app/models/Qwen/Qwen3.8-27B-FP8}:/models/model:ro
-      - ${CUSTOM_CHAT_TEMPLATE_HOST_PATH:-/home/app/models/froggeric/Qwen-Fixed-Chat-Templates/chat_template.jinja}:/etc/qwen-custom-chat-template.jinja:ro
-      - /home/app/cache/vllm/torch_compile:/root/.cache/vllm/torch_compile_cache
-      - /home/app/cache/vllm/triton:/root/.triton/cache
+      - ${MODEL_HOST_PATH:-${MODEL_ROOT:-${HOME}/models}/Qwen/Qwen3.8-27B-FP8}:/models/model:ro
+      - ${CUSTOM_CHAT_TEMPLATE_HOST_PATH:-${MODEL_ROOT:-${HOME}/models}/froggeric/Qwen-Fixed-Chat-Templates/chat_template.jinja}:/etc/qwen-custom-chat-template.jinja:ro
+      - ${VLLM_CACHE_ROOT:-${HOME}/.cache/LocalLLM/vllm}/torch_compile:/root/.cache/vllm/torch_compile_cache
+      - ${VLLM_CACHE_ROOT:-${HOME}/.cache/LocalLLM/vllm}/triton:/root/.triton/cache
     environment:
       CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-0,1}
       NVIDIA_VISIBLE_DEVICES: all

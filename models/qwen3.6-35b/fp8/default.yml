@@ -25,14 +25,14 @@
 services:
     vllm-qwen36-35b-a3b:
         image: vllm/vllm-openai:latest
-        container_name: vllm-qwen36-35b-a3b-fp8
+        container_name: local-llm-qwen3.6-35b-fp8-vllm
         restart: unless-stopped
         ports:
             - "8080:8000"
         volumes:
-            - /models/Qwen/Qwen3.6-35B-A3B-FP8:/models/qwen36-35b-a3b-fp8:ro
-            - /home/app/cache/vllm/torch_compile_35b:/root/.cache/vllm/torch_compile_cache
-            - /home/app/cache/vllm/triton_35b:/root/.triton/cache
+            - ${MODEL_ROOT:-${HOME}/models}/Qwen/Qwen3.6-35B-A3B-FP8:/models/qwen36-35b-a3b-fp8:ro
+            - ${VLLM_CACHE_ROOT:-${HOME}/.cache/LocalLLM/vllm}/torch_compile_35b:/root/.cache/vllm/torch_compile_cache
+            - ${VLLM_CACHE_ROOT:-${HOME}/.cache/LocalLLM/vllm}/triton_35b:/root/.triton/cache
             # No external chat template: the model ships its own chat_template.jinja
             # (new tokenizer/special tokens; supports enable_thinking + <tool_call>).
         environment:

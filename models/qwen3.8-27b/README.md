@@ -80,7 +80,7 @@ docker compose \
   --stack models/qwen3.8-27b/autoround-int4/docker-compose.yml \
   --env-file models/qwen3.8-27b/autoround-int4/profiles/avuja.env \
   --service vllm-qwen38-27b-autoround-int4 \
-  --tokenizer /home/app/models/Avuja/Qwen3.8-27B-int4-AutoRound \
+  --tokenizer "$MODEL_ROOT/Avuja/Qwen3.8-27B-int4-AutoRound" \
   --start \
   --power-limit 350
 ```
@@ -149,8 +149,8 @@ that variant:
 ./helpers/run-benchmark.py \
   --stack models/qwen3.8-27b/fp8/docker-compose.yml \
   --env-file models/qwen3.8-27b/fp8/.env \
-  --service vllm-qwen38-27b \
-  --tokenizer /home/app/models/Qwen/Qwen3.8-27B-FP8 \
+  --service vllm-qwen38-27b-fp8 \
+  --tokenizer "$MODEL_ROOT/Qwen/Qwen3.8-27B-FP8" \
   --start \
   --power-limit 350
 ```

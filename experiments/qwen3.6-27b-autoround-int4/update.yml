@@ -2,15 +2,15 @@
 services:
   vllm-qwen36-27b-dual:
     image: vllm/vllm-openai:v0.25.1
-    container_name: vllm-qwen36-27b-dual
+    container_name: local-llm-qwen3.6-27b-autoround-int4-update-vllm
     restart: unless-stopped
     ports:
       - "8080:8000"
     volumes:
-      - /models/Lorbus/Qwen3.6-27B-int4-AutoRound:/models/qwen36-27b-autoround-int4:ro
-      - /home/app/cache/vllm/torch_compile:/root/.cache/vllm/torch_compile_cache
-      - /home/app/cache/vllm/triton:/root/.triton/cache
-      - /models/froggeric/Qwen-Fixed-Chat-Templates/chat_template.jinja:/etc/qwen-froggeric-chat-template.jinja:ro
+      - ${MODEL_ROOT:-${HOME}/models}/Lorbus/Qwen3.6-27B-int4-AutoRound:/models/qwen36-27b-autoround-int4:ro
+      - ${VLLM_CACHE_ROOT:-${HOME}/.cache/LocalLLM/vllm}/torch_compile:/root/.cache/vllm/torch_compile_cache
+      - ${VLLM_CACHE_ROOT:-${HOME}/.cache/LocalLLM/vllm}/triton:/root/.triton/cache
+      - ${MODEL_ROOT:-${HOME}/models}/froggeric/Qwen-Fixed-Chat-Templates/chat_template.jinja:/etc/qwen-froggeric-chat-template.jinja:ro
     environment:
       # - NCCL_P2P_DISABLE=1        # A/B #1 — try commented out first
       - NCCL_CUMEM_ENABLE=0

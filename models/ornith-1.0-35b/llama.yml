@@ -29,12 +29,12 @@
 services:
   ik-llama-ornith-35b:
     image: ${IK_LLAMA_IMAGE:-ghcr.io/ikawrakow/ik-llama-cpp@sha256:b35e062cf032f1435b90387cfd9e9679006dd628d0999d86b6e7db2d4a43964d}
-    container_name: "${ESTATE_CONTAINER:-ik-llama-ornith-35b}"
+    container_name: "${ESTATE_CONTAINER:-local-llm-ornith-1.0-35b-default-ik-llama}"
     restart: unless-stopped
     ports:
       - "${ESTATE_PORT:-${PORT:-8080}}:8080"
     volumes:
-      - "${MODEL_DIR:-/models/deepreinforce-ai/Ornith-1.0-35B-GGUF}:/models:ro"
+      - "${MODEL_DIR:-${MODEL_ROOT:-${HOME}/models}/deepreinforce-ai/Ornith-1.0-35B-GGUF}:/models:ro"
     command: >-
       --host 0.0.0.0
       --port 8080

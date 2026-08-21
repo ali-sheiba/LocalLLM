@@ -1,12 +1,12 @@
 services:
   llama-cpp-qwen36-35b-a3b:
     image: ghcr.io/ggml-org/llama.cpp:server-cuda
-    container_name: llama-cpp-qwen36-35b-a3b
+    container_name: local-llm-qwen3.6-35b-uncensored-llama-cpp
     restart: unless-stopped
     ports:
       - "8080:8080"
     volumes:
-      - /models/HauhauCS/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive:/models:ro
+      - ${MODEL_ROOT:-${HOME}/models}/HauhauCS/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive:/models:ro
     command: >-
       --host 0.0.0.0
       --port 8080

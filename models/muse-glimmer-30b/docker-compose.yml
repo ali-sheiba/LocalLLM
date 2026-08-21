@@ -1,12 +1,12 @@
 services:
   llama-cpp-muse-glimmer-30b:
     image: ghcr.io/ggml-org/llama.cpp:server-cuda
-    container_name: llama-cpp-muse-glimmer-30b
+    container_name: local-llm-muse-glimmer-30b-default-llama-cpp
     restart: unless-stopped
     ports:
       - "8080:8080"
     volumes:
-      - /home/app/models/unsloth/Muse-Glimmer-30B-GGUF:/models:ro
+      - ${MODEL_ROOT:-${HOME}/models}/unsloth/Muse-Glimmer-30B-GGUF:/models:ro
     command: >-
       --host 0.0.0.0
       --port 8080

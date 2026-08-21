@@ -3,19 +3,19 @@
 services:
   vllm-qwen38-27b-avuja-dflash2:
     image: ${VLLM_IMAGE:-vllm/vllm-openai:v0.27.1}
-    container_name: ${CONTAINER_NAME:-vllm-qwen38-27b-avuja-dflash2}
+    container_name: ${CONTAINER_NAME:-local-llm-qwen3.8-27b-avuja-dflash2-vllm}
     restart: ${RESTART_POLICY:-no}
     ports:
       - "${PORT:-8080}:8000"
     volumes:
-      - ${MODEL_HOST_PATH:-/home/app/models/Avuja/Qwen3.8-27B-int4-AutoRound}:/models/model:ro
-      - ${DRAFTER_HOST_PATH:-/home/app/models/incoai/Qwen3.8-27B-DFlash2}:/models/drafter:ro
-      - ${CUSTOM_CHAT_TEMPLATE_HOST_PATH:-/home/app/models/froggeric/Qwen-Fixed-Chat-Templates/chat_template.jinja}:/etc/qwen-custom-chat-template.jinja:ro
+      - ${MODEL_HOST_PATH:-${MODEL_ROOT:-${HOME}/models}/Avuja/Qwen3.8-27B-int4-AutoRound}:/models/model:ro
+      - ${DRAFTER_HOST_PATH:-${MODEL_ROOT:-${HOME}/models}/incoai/Qwen3.8-27B-DFlash2}:/models/drafter:ro
+      - ${CUSTOM_CHAT_TEMPLATE_HOST_PATH:-${MODEL_ROOT:-${HOME}/models}/froggeric/Qwen-Fixed-Chat-Templates/chat_template.jinja}:/etc/qwen-custom-chat-template.jinja:ro
       - ./vendor/vllm-dflash2-backport:/etc/club3090/dflash2:ro
       - ./vendor/vllm-pr48375-mamba-drop-eagle-block:/etc/club3090/pr48375:ro
       - ./local-patches:/etc/localllm/dflash2:ro
-      - /home/app/cache/vllm/torch_compile:/root/.cache/vllm/torch_compile_cache
-      - /home/app/cache/vllm/triton:/root/.triton/cache
+      - ${VLLM_CACHE_ROOT:-${HOME}/.cache/LocalLLM/vllm}/torch_compile:/root/.cache/vllm/torch_compile_cache
+      - ${VLLM_CACHE_ROOT:-${HOME}/.cache/LocalLLM/vllm}/triton:/root/.triton/cache
     environment:
       CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-0,1}
       NVIDIA_VISIBLE_DEVICES: all

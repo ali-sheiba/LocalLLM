@@ -1,14 +1,14 @@
 services:
     vllm:
         image: vllm/vllm-openai:latest
-        container_name: ornith-1.0-35b
+        container_name: local-llm-ornith-1.0-35b-fp8-vllm
         restart: unless-stopped
         ports:
             - "8080:8000"
         volumes:
-            - /models/deepreinforce-ai/Ornith-1.0-35B-FP8:/models/Ornith-1.0-35B-FP8:ro
-            - /home/app/cache/vllm/torch_compile:/root/.cache/vllm/torch_compile_cache
-            - /home/app/cache/vllm/triton:/root/.triton/cache
+            - ${MODEL_ROOT:-${HOME}/models}/deepreinforce-ai/Ornith-1.0-35B-FP8:/models/Ornith-1.0-35B-FP8:ro
+            - ${VLLM_CACHE_ROOT:-${HOME}/.cache/LocalLLM/vllm}/torch_compile:/root/.cache/vllm/torch_compile_cache
+            - ${VLLM_CACHE_ROOT:-${HOME}/.cache/LocalLLM/vllm}/triton:/root/.triton/cache
         environment:
             - NCCL_CUMEM_ENABLE=0
             - NCCL_P2P_DISABLE=1

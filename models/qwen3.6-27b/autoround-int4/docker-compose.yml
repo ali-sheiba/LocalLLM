@@ -4,16 +4,16 @@ services:
   vllm-qwen36-27b-dual:
     # image: vllm/vllm-openai:v0.22.0
     image: vllm/vllm-openai:v0.25.1
-    container_name: vllm-qwen36-27b-dual
+    container_name: local-llm-qwen3.6-27b-autoround-int4-vllm
     restart: unless-stopped
     ports:
       - "8080:8000"
     volumes:
-      - /home/app/models/Lorbus/Qwen3.6-27B-int4-AutoRound:/models/qwen36-27b-autoround-int4:ro
-      - /home/app/cache/vllm/torch_compile:/root/.cache/vllm/torch_compile_cache
-      - /home/app/cache/vllm/triton:/root/.triton/cache
-      # - /home/app/models/froggeric/Qwen-Fixed-Chat-Templates/chat_template.jinja:/etc/qwen-froggeric-chat-template.jinja:ro
-      - /home/app/models/templates/qwen3.6-froggeric-v21.3.jinja:/etc/qwen-froggeric-chat-template.jinja:ro
+      - ${MODEL_ROOT:-${HOME}/models}/Lorbus/Qwen3.6-27B-int4-AutoRound:/models/qwen36-27b-autoround-int4:ro
+      - ${VLLM_CACHE_ROOT:-${HOME}/.cache/LocalLLM/vllm}/torch_compile:/root/.cache/vllm/torch_compile_cache
+      - ${VLLM_CACHE_ROOT:-${HOME}/.cache/LocalLLM/vllm}/triton:/root/.triton/cache
+      # - ${MODEL_ROOT:-${HOME}/models}/froggeric/Qwen-Fixed-Chat-Templates/chat_template.jinja:/etc/qwen-froggeric-chat-template.jinja:ro
+      - ${MODEL_ROOT:-${HOME}/models}/templates/qwen3.6-froggeric-v21.3.jinja:/etc/qwen-froggeric-chat-template.jinja:ro
     environment:
       - NCCL_CUMEM_ENABLE=0
       - NCCL_P2P_DISABLE=1

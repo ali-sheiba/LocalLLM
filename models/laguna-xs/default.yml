@@ -3,12 +3,12 @@ services:
     # image: ghcr.io/ggml-org/llama.cpp:server-cuda-b9246
     image: ghcr.io/ggml-org/llama.cpp:server-cuda
     # image: ghcr.io/ggml-org/llama.cpp:server-cuda-b10092
-    container_name: llama-cpp-laguna-xs-2.1
+    container_name: local-llm-laguna-xs-default-llama-cpp
     restart: unless-stopped
     ports:
       - "8080:8080"
     volumes:
-      - /models/poolside/Laguna-XS-2.1-GGUF:/models:ro
+      - ${MODEL_ROOT:-${HOME}/models}/poolside/Laguna-XS-2.1-GGUF:/models:ro
     command: >-
       --host 0.0.0.0
       --port 8080

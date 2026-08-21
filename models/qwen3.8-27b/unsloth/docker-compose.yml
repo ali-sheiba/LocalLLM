@@ -1,13 +1,13 @@
 services:
   llama-cpp-qwen38-27b-mtp:
     image: ghcr.io/ggml-org/llama.cpp:server-cuda
-    container_name: llama-cpp-qwen38-27b
+    container_name: local-llm-qwen3.8-27b-unsloth-llama-cpp
     restart: unless-stopped
     ports:
       - "8080:8080"
     volumes:
-      - /home/app/models/unsloth/Qwen3.8-27B-GGUF:/models:ro
-      - /home/app/models/froggeric/Qwen-Fixed-Chat-Templates/chat_template.jinja:/etc/qwen-froggeric-chat-template.jinja:ro
+      - ${MODEL_ROOT:-${HOME}/models}/unsloth/Qwen3.8-27B-GGUF:/models:ro
+      - ${MODEL_ROOT:-${HOME}/models}/froggeric/Qwen-Fixed-Chat-Templates/chat_template.jinja:/etc/qwen-froggeric-chat-template.jinja:ro
     command: >-
       --host 0.0.0.0
       --port 8080

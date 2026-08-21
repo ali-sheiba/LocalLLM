@@ -1,13 +1,14 @@
 services:
     llamacpp-embed-cpu:
         image: ghcr.io/ggml-org/llama.cpp:server
+        container_name: local-llm-llama-embed-default-llama-cpp
         restart: unless-stopped
         ports:
             - "8082:8082"
         networks:
             - embed-net
         volumes:
-            - /home/app/models/nomic-ai/nomic-embed-text-v2-moe-GGUF:/models:ro
+            - ${MODEL_ROOT:-${HOME}/models}/nomic-ai/nomic-embed-text-v2-moe-GGUF:/models:ro
         command: >
             --model /models/nomic-embed-text-v2-moe.Q6_K.gguf
             --alias nomic-embed-text-v2-moe
