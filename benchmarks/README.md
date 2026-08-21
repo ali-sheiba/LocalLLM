@@ -4,7 +4,17 @@ This directory is the durable experiment ledger for LocalLLM serving stacks. Eac
 
 ## Run a benchmark
 
-The recorder requires [`uv`](https://docs.astral.sh/uv/) in the invoking process's `PATH` (check with `uv --version`). If it is installed elsewhere, pass `--uv /absolute/path/to/uv`. Start the intended stack first, then run the recorder from the LocalLLM repository:
+The recorder requires [`uv`](https://docs.astral.sh/uv/) in the invoking process's `PATH` (check with `uv --version`) and a local checkout of [SeraphimSerapis/tool-eval-bench](https://github.com/SeraphimSerapis/tool-eval-bench). Clone it once outside this repository and set `TOOL_EVAL_DIR` to that checkout:
+
+```sh
+mkdir -p "$HOME/bench"
+git clone https://github.com/SeraphimSerapis/tool-eval-bench.git "$HOME/bench/tool-eval-bench"
+export TOOL_EVAL_DIR="$HOME/bench/tool-eval-bench"
+```
+
+The helper defaults to `~/bench/tool-eval-bench` when `TOOL_EVAL_DIR` is unset. Override either location for one run with `--tool-eval-dir /absolute/path/to/tool-eval-bench`; that option takes precedence over `TOOL_EVAL_DIR`. If `uv` is installed elsewhere, pass `--uv /absolute/path/to/uv`. Pin or record the upstream checkout revision when comparing runs: the recorder stores its Git commit in `run.json`.
+
+Start the intended stack first, then run the recorder from the LocalLLM repository:
 
 ```sh
 ./helpers/run-benchmark.py \
@@ -45,7 +55,7 @@ The script runs llama-benchy directly so its complete JSON result is retained, t
   --start
 ```
 
-Use `--model`, `--model-source`, or `--tokenizer` when automatic discovery is insufficient. `--model-source` should be the actual host model path or an HF-style `author/model` identifier. Use `--env-file` with `--start` to select a particular Compose environment file; its path and SHA-256 are recorded, but its contents are not. An optional API key is read from `TOOL_EVAL_API_KEY` by default and is never written to a run record.
+Use `--model`, `--model-source`, or `--tokenizer` when automatic discovery is insufficient. `--model-source` should be the actual host model path or an HF-style `author/model` identifier. Use `--env-file` with `--start` to select a particular Compose environment file; its path and SHA-256 are recorded in run.json, but its contents are not. Use `--tool-eval-dir` only when you need to override `TOOL_EVAL_DIR` for a run. An optional API key is read from `TOOL_EVAL_API_KEY` by default and is never written to a run record.
 
 > **Stack safety:** GPU stacks share the same hardware and normally port `8080`. The benchmark runner does not stop a different stack. Ensure the intended stack is the only GPU workload before running a benchmark.
 

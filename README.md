@@ -67,11 +67,16 @@ sudo apt update
 sudo apt install -y git curl python3 python3-venv
 ```
 
-Benchmarking additionally requires [`uv`](https://docs.astral.sh/uv/). Install it with its official installer and confirm it is in `PATH`:
+Benchmarking additionally requires [`uv`](https://docs.astral.sh/uv/) and a local checkout of [SeraphimSerapis/tool-eval-bench](https://github.com/SeraphimSerapis/tool-eval-bench). Install `uv` with its official installer, clone the benchmark repository, and configure its location:
 
 ```sh
 uv --version
+mkdir -p "$HOME/bench"
+git clone https://github.com/SeraphimSerapis/tool-eval-bench.git "$HOME/bench/tool-eval-bench"
+export TOOL_EVAL_DIR="$HOME/bench/tool-eval-bench"
 ```
+
+The benchmark helper runs `uv` from this checkout to invoke both `tool-eval-bench` and `llama-benchy`. For reproducible comparisons, record and keep the same upstream checkout revision; the helper stores its Git commit in each run record. Set `TOOL_EVAL_DIR` in your shell profile when using a non-default location. The CLI option `--tool-eval-dir /path/to/tool-eval-bench` overrides the environment variable for one invocation.
 
 ### 3. Clone and configure storage
 
@@ -148,9 +153,10 @@ Stop the same configuration with `docker compose ... down` before launching anot
 
 ## Benchmarks
 
-The benchmark recorder captures the resolved Compose configuration, sanitized environment, GPU state, tool-calling quality, and one- and two-agent throughput. Start the target stack first, then run:
+The benchmark recorder captures the resolved Compose configuration, sanitized environment, GPU state, tool-calling quality, and one- and two-agent throughput. It requires the local `tool-eval-bench` checkout configured through `TOOL_EVAL_DIR` (or the default `~/bench/tool-eval-bench`). Start the target stack first, then run:
 
 ```sh
+TOOL_EVAL_DIR="$HOME/bench/tool-eval-bench" \
 ./helpers/run-benchmark.py \
   --stack models/qwen3.8-27b/fp8/docker-compose.yml \
   --service vllm-qwen38-27b-fp8 \

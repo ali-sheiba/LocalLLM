@@ -63,7 +63,7 @@ Compose files may be named `default.yml`, `docker-compose.yml`, or a model-speci
 ## Benchmarking
 
 - `helpers/run-benchmark.py` writes immutable `report.md` and `run.json` artifacts under `benchmarks/runs/` and rebuilds the index.
-- Install `uv` before running benchmark helpers. See `benchmarks/README.md` for the protocol.
+- Install `uv` and clone `https://github.com/SeraphimSerapis/tool-eval-bench` before running benchmark helpers. Set `TOOL_EVAL_DIR` to the checkout (default: `$HOME/bench/tool-eval-bench`); see `benchmarks/README.md` for the protocol.
 - Compare runs only when model source/quantization, engine/image, effective command/environment, GPU topology, power policy, and measurement protocol are equivalent.
 - At concurrency two, report per-agent responsiveness as well as aggregate throughput.
 - Historical benchmark records must not be edited merely to reflect a newer local path or Compose file.

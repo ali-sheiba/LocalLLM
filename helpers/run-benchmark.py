@@ -460,7 +460,12 @@ def main() -> int:
     parser.add_argument("--backend", choices=("vllm", "llamacpp", "litellm"), help="Optional tool-eval backend label")
     parser.add_argument("--model-source", help="Override the HF-style source/model path inferred from container mounts")
     parser.add_argument("--tokenizer", help="Local tokenizer path passed to llama-benchy")
-    parser.add_argument("--tool-eval-dir", type=Path, default=Path.home() / "bench" / "tool-eval-bench")
+    parser.add_argument(
+        "--tool-eval-dir",
+        type=Path,
+        default=Path(os.environ.get("TOOL_EVAL_DIR", Path.home() / "bench" / "tool-eval-bench")),
+        help="Local tool-eval-bench checkout (default: TOOL_EVAL_DIR or ~/bench/tool-eval-bench)",
+    )
     parser.add_argument("--uv", help="Path to the uv executable (defaults to uv found on PATH)")
     parser.add_argument("--api-key-env", default="TOOL_EVAL_API_KEY", help="Environment variable containing an optional API key")
     parser.add_argument("--seed", type=int, default=42)
